@@ -251,11 +251,26 @@ def load_chembl_csv(path: str, cfg: "Config") -> pd.DataFrame:
     pchembl_c = find("pchembl")
     value_c = find("standard value", "standard_value")
     units_c = find("standard units", "standard_units")
+    target_c = find("target chembl")
     if smiles_c is None:
         raise ValueError(f"SMILES 컬럼을 찾지 못했습니다. 헤더: {list(raw.columns)}")
 
     df = raw.rename(columns={smiles_c: "canonical_smiles"})
     df = df.dropna(subset=["canonical_smiles"]).copy()
+
+    # 타겟 필터: CSV에 Target ChEMBL ID가 있으면 우리 타겟 행만 남긴다.
+    # (ChEMBL 검색/RELATED ACTIVITIES는 여러 타겟이 섞이기 쉬움 — 오염 방지)
+    tid = TARGETS.get(cfg.target, {}).get("chembl_id")
+    if target_c and tid:
+        before = len(df)
+        df = df[df[target_c].astype(str).str.strip() == tid]
+        print(f"[chembl-csv] 타겟 {tid} 필터: {before} → {len(df)}행")
+        if df.empty:
+            others = raw[target_c].astype(str).str.strip().value_counts().head(5).to_dict()
+            raise ValueError(
+                f"이 CSV에 타겟 {tid}({cfg.target}) 데이터가 없습니다. "
+                f"파일에 든 타겟(상위): {others}. "
+                f"ChEMBL 타겟 페이지의 Activities에서 다시 받으세요.")
 
     pic50 = pd.to_numeric(df[pchembl_c], errors="coerce") if pchembl_c \
         else pd.Series(np.nan, index=df.index)
@@ -277,10 +292,15 @@ def load_chembl_csv(path: str, cfg: "Config") -> pd.DataFrame:
 def assemble_training_data(cfg: "Config") -> pd.DataFrame:
     """ChEMBL + (선택)PubChem을 합쳐 학습셋을 만든다. 스키마: canonical_smiles, active."""
     frames = []
-    # ChEMBL: 수동 CSV가 있으면 우선 사용, 없으면 API 시도
+    # ChEMBL: 수동 CSV가 있으면 우선 사용, 없으면 API 시도. 실패해도 파이프라인은 계속.
+    csv_ok = False
     if cfg.chembl_csv_path and os.path.exists(cfg.chembl_csv_path):
-        frames.append(load_chembl_csv(cfg.chembl_csv_path, cfg))
-    else:
+        try:
+            frames.append(load_chembl_csv(cfg.chembl_csv_path, cfg))
+            csv_ok = True
+        except Exception as e:
+            print(f"[data] ChEMBL CSV 사용 불가 (건너뜀): {e}")
+    if not csv_ok and not (cfg.chembl_csv_path and os.path.exists(cfg.chembl_csv_path)):
         try:
             chembl = fetch_bioactivity(cfg)
             frames.append(chembl[["canonical_smiles", "active"]])
