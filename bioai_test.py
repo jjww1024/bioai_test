@@ -403,52 +403,74 @@ def similarity_matrix(candidates: dict[str, str], cfg: Config) -> pd.DataFrame:
 #   NPASS   : https://bidd.group/NPASS/               (structure TSV; SMILES = 'canonical_smiles')
 #   COCONUT : https://coconut.naturalproducts.net/download  (CSV; SMILES = 'canonical_smiles')
 
+# 컬럼 자동 감지용 힌트 (우선순위 순). 대부분의 천연물 DB 덤프를 커버합니다.
+_SMILES_HINTS = ("canonical_smiles", "smiles", "moldb_smiles",
+                 "isomeric_smiles", "smile", "structure")
+_NAME_HINTS = ("name", "pref_name", "compound_name", "identifier",
+               "coconut_id", "np_id", "public_id", "cid", "id", "title")
+
+
+def detect_columns(path: str, sep: str) -> tuple[str, str]:
+    """파일 헤더에서 SMILES 컬럼과 이름/ID 컬럼을 자동으로 찾는다."""
+    header = pd.read_csv(path, sep=sep, nrows=0).columns.tolist()
+    lower = {c.lower(): c for c in header}
+
+    smiles_col = next((lower[h] for h in _SMILES_HINTS if h in lower), None)
+    if smiles_col is None:   # 부분 일치 폴백
+        smiles_col = next((c for c in header if "smiles" in c.lower()), None)
+    if smiles_col is None:
+        raise ValueError(f"SMILES 컬럼을 찾지 못했습니다. 헤더: {header}")
+
+    name_col = next((lower[h] for h in _NAME_HINTS if h in lower), None)
+    if name_col is None or name_col == smiles_col:
+        name_col = next((c for c in header if c != smiles_col), header[0])
+    return smiles_col, name_col
+
+
 def load_library_from_file(path: str,
-                           smiles_col: str,
-                           name_col: str,
-                           sep: str = ",",
+                           smiles_col: str | None = None,
+                           name_col: str | None = None,
+                           sep: str | None = None,
                            source_tag: str = "") -> dict[str, str]:
     """
     CSV/TSV 파일에서 {이름: SMILES} 딕셔너리를 만든다.
-    - smiles_col : SMILES가 든 컬럼명
-    - name_col   : 화합물 이름/ID 컬럼명
-    - sep        : 구분자 (CSV=',', TSV='\\t')
+    smiles_col / name_col을 생략하면 헤더에서 자동 감지한다.
+    - sep : None이면 확장자로 추정(.tsv/.tab/.txt → 탭, 그 외 → 콤마)
     - source_tag : 이름 앞에 붙일 출처 태그 (예: 'FooDB'), 소스 구분/중복 방지용
     """
-    df = pd.read_csv(path, sep=sep, usecols=lambda c: c in {smiles_col, name_col})
+    if sep is None:
+        sep = "\t" if path.lower().endswith((".tsv", ".tab", ".txt")) else ","
+    if smiles_col is None or name_col is None:
+        det_s, det_n = detect_columns(path, sep)
+        smiles_col = smiles_col or det_s
+        name_col = name_col or det_n
+
+    print(f"[lib] {source_tag or path}: SMILES='{smiles_col}', 이름='{name_col}' 컬럼 사용")
+    df = pd.read_csv(path, sep=sep, usecols=[smiles_col, name_col],
+                     on_bad_lines="skip", low_memory=False)
     df = df.dropna(subset=[smiles_col, name_col])
-    lib: dict[str, str] = {}
-    for _, row in df.iterrows():
-        key = f"{source_tag}:{row[name_col]}" if source_tag else str(row[name_col])
-        lib[key] = str(row[smiles_col])
+
+    # 대용량 DB(수십만 행) 대비: iterrows 대신 zip으로 빠르게 딕셔너리 생성
+    prefix = f"{source_tag}:" if source_tag else ""
+    lib = {prefix + str(n): str(s)
+           for n, s in zip(df[name_col], df[smiles_col])}
     print(f"[lib] {source_tag or path}: {len(lib)}개 화합물 로드")
     return lib
 
 
 def load_foodb(path: str) -> dict[str, str]:
-    """FooDB Compounds 덤프(CSV) 로더. 컬럼명은 실제 파일에 맞게 조정하세요."""
-    return load_library_from_file(
-        path, smiles_col="moldb_smiles", name_col="name",
-        sep=",", source_tag="FooDB")
+    """FooDB Compounds 덤프(CSV) 로더. 컬럼은 자동 감지."""
+    return load_library_from_file(path, sep=",", source_tag="FooDB")
 
 
 def load_npass(path: str) -> dict[str, str]:
-    """NPASS structure 덤프(TSV) 로더. 컬럼명은 실제 파일에 맞게 조정하세요."""
-    return load_library_from_file(
-        path, smiles_col="canonical_smiles", name_col="pref_name",
-        sep="\t", source_tag="NPASS")
+    """NPASS structure 덤프(TSV) 로더. 컬럼은 자동 감지."""
+    return load_library_from_file(path, sep="\t", source_tag="NPASS")
 
 
 def load_coconut(path: str) -> dict[str, str]:
-    """
-    COCONUT (COlleCtion of Open NAtural producTs) 덤프(CSV) 로더.
-    ~40만+ 천연물 구조를 포함하는 대형 DB. 컬럼명은 다운로드 버전마다 다를 수 있으니
-    실제 파일 헤더를 확인해 smiles_col/name_col을 맞추세요.
-    (흔한 컬럼: 'canonical_smiles' 또는 'smiles', 이름/ID는 'identifier' 또는 'name')
-    """
-    return load_library_from_file(
-        path, smiles_col="canonical_smiles", name_col="identifier",
-        sep=",", source_tag="COCONUT")
+    """COCONUT(~40만+ 천연물) 덤프(CSV) 로더. 컬럼은 자동 감지."""
+    return load_library_from_file(path, sep=",", source_tag="COCONUT")
 
 
 # 소스 태그 → (로더 함수, cfg 경로 속성명) 매핑. 새 DB는 여기에 한 줄만 추가하면 됩니다.
