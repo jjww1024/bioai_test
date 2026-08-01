@@ -84,6 +84,8 @@ class Config:
     random_state: int = 42
     cache_dir: str = "bioai_cache"
     augment_pubchem: bool = False  # PubChem BioAssay로 학습셋 보강 여부
+    # ChEMBL 웹에서 수동 다운로드한 activity CSV 경로 (있으면 API 대신 이 파일 사용)
+    chembl_csv_path: str = "data/chembl_activities.csv"
     # 스크리닝 라이브러리 파일 경로 (없으면 DEMO_CANDIDATES로 폴백)
     foodb_path: str = "data/foodb_compounds.csv"
     npass_path: str = "data/npass_structures.tsv"
@@ -222,15 +224,70 @@ def fetch_pubchem_bioassay(cfg: "Config", geneid: int,
     return df
 
 
+def load_chembl_csv(path: str, cfg: "Config") -> pd.DataFrame:
+    """
+    ChEMBL 웹사이트에서 수동으로 내려받은 activity CSV를 학습 스키마로 변환한다.
+    (API가 장애일 때 유용. ChEMBL 웹 CSV는 보통 ';' 구분 — 구분자/컬럼 자동 판별.)
+
+    active 판정: 'pChEMBL Value'가 있으면 그 값을, 없으면 'Standard Value'(nM)를
+                 pIC50 = -log10(value*1e-9)로 환산해 active_threshold와 비교.
+    반환: DataFrame[canonical_smiles, active]
+
+    다운로드 방법:
+      https://www.ebi.ac.uk/chembl/ → 타겟(HSD17B13, CHEMBL5305042) 검색 →
+      Activities 탭 → CSV 내려받아 data/chembl_activities.csv 로 저장.
+    """
+    raw = pd.read_csv(path, sep=None, engine="python", on_bad_lines="skip")
+    cols = {c.lower().strip(): c for c in raw.columns}
+
+    def find(*keys):
+        for k in keys:
+            for lc, orig in cols.items():
+                if k in lc:
+                    return orig
+        return None
+
+    smiles_c = find("smiles")
+    pchembl_c = find("pchembl")
+    value_c = find("standard value", "standard_value")
+    units_c = find("standard units", "standard_units")
+    if smiles_c is None:
+        raise ValueError(f"SMILES 컬럼을 찾지 못했습니다. 헤더: {list(raw.columns)}")
+
+    df = raw.rename(columns={smiles_c: "canonical_smiles"})
+    df = df.dropna(subset=["canonical_smiles"]).copy()
+
+    pic50 = pd.to_numeric(df[pchembl_c], errors="coerce") if pchembl_c \
+        else pd.Series(np.nan, index=df.index)
+    if value_c:                                    # pChEMBL이 없는 행은 값으로 보완
+        val = pd.to_numeric(df[value_c], errors="coerce")
+        if units_c:                                # 단위가 있으면 nM만 사용
+            val = val.where(df[units_c].astype(str).str.strip() == "nM")
+        pic50 = pic50.fillna(-np.log10(val * 1e-9))
+
+    df["pIC50"] = pic50
+    df = df.dropna(subset=["pIC50"])
+    df["active"] = (df["pIC50"] >= cfg.active_threshold).astype(int)
+    df = df.drop_duplicates("canonical_smiles")
+    print(f"[chembl-csv] {path}: {len(df)}개 "
+          f"(active={int(df['active'].sum())}, inactive={int((df['active']==0).sum())})")
+    return df[["canonical_smiles", "active"]]
+
+
 def assemble_training_data(cfg: "Config") -> pd.DataFrame:
     """ChEMBL + (선택)PubChem을 합쳐 학습셋을 만든다. 스키마: canonical_smiles, active."""
     frames = []
-    try:
-        chembl = fetch_bioactivity(cfg)
-        frames.append(chembl[["canonical_smiles", "active"]])
-    except Exception as e:
-        msg = " ".join(str(e).split())[:200]   # 장문 HTML 에러 방지로 잘라냄
-        print(f"[data] ChEMBL 수집 실패 (건너뜀): {msg}")
+    # ChEMBL: 수동 CSV가 있으면 우선 사용, 없으면 API 시도
+    if cfg.chembl_csv_path and os.path.exists(cfg.chembl_csv_path):
+        frames.append(load_chembl_csv(cfg.chembl_csv_path, cfg))
+    else:
+        try:
+            chembl = fetch_bioactivity(cfg)
+            frames.append(chembl[["canonical_smiles", "active"]])
+        except Exception as e:
+            msg = " ".join(str(e).split())[:200]   # 장문 HTML 에러 방지로 잘라냄
+            print(f"[data] ChEMBL API 수집 실패 (건너뜀): {msg}")
+            print(f"[data] 대안: ChEMBL 웹에서 CSV 받아 {cfg.chembl_csv_path} 에 두면 그걸 사용합니다.")
 
     if cfg.augment_pubchem:
         geneid = TARGETS[cfg.target].get("geneid")
@@ -543,10 +600,14 @@ def main():
                         help="active 판정 pIC50 임계값 (기본: 6.0 = IC50 1uM)")
     parser.add_argument("--augment-pubchem", action="store_true",
                         help="PubChem BioAssay로 학습셋 보강 (ChEMBL이 적을 때)")
+    parser.add_argument("--chembl-csv", default=None,
+                        help="ChEMBL 웹에서 받은 activity CSV 경로 (API 대신 사용)")
     args = parser.parse_args()
 
     cfg = Config(target=args.target, active_threshold=args.threshold,
                  augment_pubchem=args.augment_pubchem)
+    if args.chembl_csv:
+        cfg.chembl_csv_path = args.chembl_csv
     run_pipeline(cfg)
 
 

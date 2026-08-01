@@ -34,9 +34,21 @@ pip install -r requirements.txt
 ```bash
 python bioai_test.py                    # HSD17B13, 데모 후보로 바로 실행
 python bioai_test.py --target THRB      # 다른 타겟
+python bioai_test.py --augment-pubchem  # PubChem BioAssay로 학습셋 보강
+python bioai_test.py --chembl-csv data/chembl_activities.csv  # 수동 ChEMBL CSV 사용
 ```
 
 천연물 DB 파일이 없으면 내장 `DEMO_CANDIDATES`로 폴백하므로 설치 직후 바로 돌아갑니다.
+
+## 학습 데이터 소스 (3가지, 자동 통합)
+
+`assemble_training_data`가 아래를 합쳐 학습셋을 만듭니다:
+
+1. **ChEMBL API** (기본) — 자동 다운로드
+2. **ChEMBL 수동 CSV** (`data/chembl_activities.csv`가 있으면 API 대신 사용) — **API 장애 시 유용**
+   - 다운로드: [ChEMBL](https://www.ebi.ac.uk/chembl/)에서 타겟(HSD17B13 = `CHEMBL5305042`) 검색 →
+     Activities 탭 → CSV 내려받아 `data/chembl_activities.csv`로 저장. (세미콜론 구분·컬럼명 자동 인식)
+3. **PubChem BioAssay** (`--augment-pubchem`) — NCBI GeneID로 active/inactive 수집
 
 ## 천연물 DB 준비 (선택)
 
