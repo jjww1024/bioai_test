@@ -143,19 +143,30 @@ def fetch_bioactivity(cfg: Config) -> pd.DataFrame:
 # ---------------------------------------------------------------------------
 # 2. Featurization — SMILES → Morgan fingerprint
 # ---------------------------------------------------------------------------
+# RDKit 2026부터 GetMorganFingerprintAsBitVect는 deprecated → MorganGenerator 사용.
+# 생성기는 (radius, bits)별로 한 번만 만들어 캐시 (대용량 DB 스크리닝 성능).
+_MORGAN_GEN_CACHE: dict = {}
+
+
+def _morgan_gen(cfg: Config):
+    from rdkit.Chem import rdFingerprintGenerator
+    key = (cfg.fp_radius, cfg.fp_bits)
+    gen = _MORGAN_GEN_CACHE.get(key)
+    if gen is None:
+        gen = rdFingerprintGenerator.GetMorganGenerator(
+            radius=cfg.fp_radius, fpSize=cfg.fp_bits)
+        _MORGAN_GEN_CACHE[key] = gen
+    return gen
+
+
 def smiles_to_fp(smiles: str, cfg: Config):
     """단일 SMILES를 Morgan fingerprint(numpy array)로. 실패 시 None."""
     from rdkit import Chem
-    from rdkit.Chem import AllChem
 
     mol = Chem.MolFromSmiles(smiles)
     if mol is None:
         return None
-    fp = AllChem.GetMorganFingerprintAsBitVect(mol, cfg.fp_radius, nBits=cfg.fp_bits)
-    arr = np.zeros((cfg.fp_bits,), dtype=np.int8)
-    from rdkit.DataStructs import ConvertToNumpyArray
-    ConvertToNumpyArray(fp, arr)
-    return arr
+    return _morgan_gen(cfg).GetFingerprintAsNumPy(mol)
 
 
 def build_feature_matrix(df: pd.DataFrame, cfg: Config):
@@ -243,15 +254,15 @@ def screen_candidates(clf, candidates: dict[str, str], cfg: Config) -> pd.DataFr
 def similarity_matrix(candidates: dict[str, str], cfg: Config) -> pd.DataFrame:
     """후보 물질 간 Tanimoto 유사도 행렬(대칭)."""
     from rdkit import Chem
-    from rdkit.Chem import AllChem
     from rdkit import DataStructs
 
+    gen = _morgan_gen(cfg)
     names, fps = [], []
     for name, smi in candidates.items():
         mol = Chem.MolFromSmiles(smi)
         if mol is None:
             continue
-        fps.append(AllChem.GetMorganFingerprintAsBitVect(mol, cfg.fp_radius, nBits=cfg.fp_bits))
+        fps.append(gen.GetFingerprint(mol))
         names.append(name)
 
     n = len(fps)
