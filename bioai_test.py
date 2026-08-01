@@ -57,7 +57,9 @@ TARGETS: dict[str, dict] = {
     #   대표 저해제: BI-3231. 비교적 최신 타겟이라 ChEMBL 데이터가 적을 수 있으니
     #   데이터가 부족하면 PubChem BioAssay / 논문 SI로 보강하세요.
     #   chembl_id는 UniProt Q7Z5P4(human)의 ChEMBL 상호참조로 확인함 (2026-08-01).
-    "HSD17B13": {"chembl_id": "CHEMBL5305042", "name": "17-beta-hydroxysteroid dehydrogenase 13"},
+    #   geneid: NCBI Gene ID (PubChem BioAssay 보강용).
+    "HSD17B13": {"chembl_id": "CHEMBL5305042", "geneid": 345275,
+                 "name": "17-beta-hydroxysteroid dehydrogenase 13"},
     "THRB":  {"chembl_id": "CHEMBL1947",  "name": "Thyroid hormone receptor beta"},
     "FASN":  {"chembl_id": "CHEMBL4158",  "name": "Fatty acid synthase"},
     "ACACA": {"chembl_id": "CHEMBL3616",  "name": "Acetyl-CoA carboxylase 1"},
@@ -81,6 +83,7 @@ class Config:
     test_size: float = 0.2
     random_state: int = 42
     cache_dir: str = "bioai_cache"
+    augment_pubchem: bool = False  # PubChem BioAssay로 학습셋 보강 여부
     # 스크리닝 라이브러리 파일 경로 (없으면 DEMO_CANDIDATES로 폴백)
     foodb_path: str = "data/foodb_compounds.csv"
     npass_path: str = "data/npass_structures.tsv"
@@ -137,6 +140,116 @@ def fetch_bioactivity(cfg: Config) -> pd.DataFrame:
     df.to_csv(cache, index=False)
     print(f"[data] {len(df)}개 화합물 저장 → {cache} "
           f"(active={df['active'].sum()}, inactive={(df['active']==0).sum()})")
+    return df
+
+
+# ---------------------------------------------------------------------------
+# 1.5 학습 데이터 보강 — PubChem BioAssay (ChEMBL이 부족/장애일 때)
+# ---------------------------------------------------------------------------
+# PubChem은 assay 결과를 Active/Inactive 범주로 제공하므로 active 라벨로 직접 사용.
+# NCBI GeneID로 타겟에 연결된 assay(AID)를 찾고, 각 AID의 active/inactive 화합물을
+# 모아 SMILES까지 받아온다. ChEMBL(IC50 기반)과 스키마를 맞춰 concat 가능.
+def fetch_pubchem_bioassay(cfg: "Config", geneid: int,
+                           max_aids: int = 60, max_cids: int = 6000,
+                           pause: float = 0.25) -> pd.DataFrame:
+    """반환: DataFrame[canonical_smiles, active] (active: 1/0)."""
+    import time
+    import requests
+
+    os.makedirs(cfg.cache_dir, exist_ok=True)
+    cache = os.path.join(cfg.cache_dir, f"{cfg.target}_pubchem.csv")
+    if os.path.exists(cache):
+        print(f"[pubchem] 캐시 사용: {cache}")
+        return pd.read_csv(cache)
+
+    base = "https://pubchem.ncbi.nlm.nih.gov/rest/pug"
+
+    def _get(url, **params):
+        for _ in range(3):
+            try:
+                r = requests.get(url, params=params, timeout=60)
+            except requests.RequestException:
+                time.sleep(1.0); continue
+            if r.status_code == 200:
+                return r.json()
+            if r.status_code == 404:   # 해당 유형 결과 없음 — 정상
+                return None
+            time.sleep(1.0)
+        return None
+
+    # 1) geneid → AID 목록
+    j = _get(f"{base}/assay/target/geneid/{geneid}/aids/JSON")
+    aids = (j or {}).get("IdentifierList", {}).get("AID", [])[:max_aids]
+    print(f"[pubchem] geneid {geneid}: assay {len(aids)}개")
+
+    active_cids, inactive_cids = set(), set()
+    for aid in aids:
+        for label, bucket in (("active", active_cids), ("inactive", inactive_cids)):
+            ja = _get(f"{base}/assay/aid/{aid}/cids/JSON", cids_type=label)
+            for info in (ja or {}).get("InformationList", {}).get("Information", []):
+                bucket.update(info.get("CID", []))
+            time.sleep(pause)
+    inactive_cids -= active_cids   # active 우선
+    print(f"[pubchem] active CID {len(active_cids)}, inactive CID {len(inactive_cids)}")
+
+    # 2) CID → SMILES (배치 100개씩). PubChem 속성명 버전차 대비해 폴백.
+    def cids_to_rows(cids, label):
+        cids = list(cids)[:max_cids]
+        rows = []
+        for i in range(0, len(cids), 100):
+            chunk = ",".join(map(str, cids[i:i + 100]))
+            jp = None
+            for prop in ("SMILES", "CanonicalSMILES"):
+                jp = _get(f"{base}/compound/cid/{chunk}/property/{prop}/JSON")
+                if jp and jp.get("PropertyTable", {}).get("Properties"):
+                    break
+            for p in (jp or {}).get("PropertyTable", {}).get("Properties", []):
+                smi = p.get("SMILES") or p.get("CanonicalSMILES")
+                if smi:
+                    rows.append({"canonical_smiles": smi, "active": label})
+            time.sleep(pause)
+        return rows
+
+    rows = cids_to_rows(active_cids, 1) + cids_to_rows(inactive_cids, 0)
+    df = pd.DataFrame(rows)
+    if df.empty:
+        print("[pubchem] 수집된 화합물이 없습니다.")
+        return df
+    df = df.drop_duplicates("canonical_smiles")
+    df.to_csv(cache, index=False)
+    print(f"[pubchem] {len(df)}개 화합물 저장 → {cache} "
+          f"(active={int(df['active'].sum())})")
+    return df
+
+
+def assemble_training_data(cfg: "Config") -> pd.DataFrame:
+    """ChEMBL + (선택)PubChem을 합쳐 학습셋을 만든다. 스키마: canonical_smiles, active."""
+    frames = []
+    try:
+        chembl = fetch_bioactivity(cfg)
+        frames.append(chembl[["canonical_smiles", "active"]])
+    except Exception as e:
+        msg = " ".join(str(e).split())[:200]   # 장문 HTML 에러 방지로 잘라냄
+        print(f"[data] ChEMBL 수집 실패 (건너뜀): {msg}")
+
+    if cfg.augment_pubchem:
+        geneid = TARGETS[cfg.target].get("geneid")
+        if geneid:
+            pc = fetch_pubchem_bioassay(cfg, geneid)
+            if not pc.empty:
+                frames.append(pc[["canonical_smiles", "active"]])
+        else:
+            print(f"[data] {cfg.target}에 geneid가 없어 PubChem 보강 스킵")
+
+    if not frames:
+        raise RuntimeError(
+            "학습 데이터를 하나도 확보하지 못했습니다. "
+            "ChEMBL API 상태를 확인하거나 --augment-pubchem을 켜세요."
+        )
+    df = pd.concat(frames, ignore_index=True).drop_duplicates("canonical_smiles")
+    df = df.reset_index(drop=True)
+    print(f"[data] 통합 학습셋: {len(df)}개 "
+          f"(active={int(df['active'].sum())}, inactive={int((df['active']==0).sum())})")
     return df
 
 
@@ -385,7 +498,7 @@ def run_pipeline(cfg: Config):
           f"({TARGETS[cfg.target]['name']})")
     print("=" * 70)
 
-    df = fetch_bioactivity(cfg)
+    df = assemble_training_data(cfg)          # ChEMBL (+ 선택적 PubChem 보강)
     clf = train_model(df, cfg)
 
     library = build_screening_library(cfg)   # FooDB + NPASS + COCONUT 통합 (없으면 데모)
@@ -406,9 +519,12 @@ def main():
                         help="타겟 바이오마커 (기본: HSD17B13)")
     parser.add_argument("--threshold", type=float, default=6.0,
                         help="active 판정 pIC50 임계값 (기본: 6.0 = IC50 1uM)")
+    parser.add_argument("--augment-pubchem", action="store_true",
+                        help="PubChem BioAssay로 학습셋 보강 (ChEMBL이 적을 때)")
     args = parser.parse_args()
 
-    cfg = Config(target=args.target, active_threshold=args.threshold)
+    cfg = Config(target=args.target, active_threshold=args.threshold,
+                 augment_pubchem=args.augment_pubchem)
     run_pipeline(cfg)
 
 
