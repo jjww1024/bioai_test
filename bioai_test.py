@@ -56,8 +56,8 @@ TARGETS: dict[str, dict] = {
     #   GWAS에서 loss-of-function 변이가 MASLD/NASH에 보호적 → 저해제 개발 대상.
     #   대표 저해제: BI-3231. 비교적 최신 타겟이라 ChEMBL 데이터가 적을 수 있으니
     #   데이터가 부족하면 PubChem BioAssay / 논문 SI로 보강하세요.
-    #   ↓ chembl_id는 반드시 ChEMBL에서 "HSD17B13" 검색해 실제 값으로 확인/교체할 것.
-    "HSD17B13": {"chembl_id": "CHEMBL4523954", "name": "17-beta-HSD type 13"},
+    #   chembl_id는 UniProt Q7Z5P4(human)의 ChEMBL 상호참조로 확인함 (2026-08-01).
+    "HSD17B13": {"chembl_id": "CHEMBL5305042", "name": "17-beta-hydroxysteroid dehydrogenase 13"},
     "THRB":  {"chembl_id": "CHEMBL1947",  "name": "Thyroid hormone receptor beta"},
     "FASN":  {"chembl_id": "CHEMBL4158",  "name": "Fatty acid synthase"},
     "ACACA": {"chembl_id": "CHEMBL3616",  "name": "Acetyl-CoA carboxylase 1"},
