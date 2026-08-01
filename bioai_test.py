@@ -84,6 +84,8 @@ class Config:
     random_state: int = 42
     cache_dir: str = "bioai_cache"
     augment_pubchem: bool = False  # PubChem BioAssay로 학습셋 보강 여부
+    add_decoys: bool = False        # 무작위 PubChem 화합물로 decoy(가정 비활성) 추가
+    decoy_multiplier: float = 1.0   # 목표 inactive 수 = active 수 × 이 값
     # ChEMBL 웹에서 수동 다운로드한 activity CSV 경로 (있으면 API 대신 이 파일 사용)
     chembl_csv_path: str = "data/chembl_activities.csv"
     # 스크리닝 라이브러리 파일 경로 (없으면 DEMO_CANDIDATES로 폴백)
@@ -224,6 +226,76 @@ def fetch_pubchem_bioassay(cfg: "Config", geneid: int,
     return df
 
 
+def generate_decoys(cfg: "Config", active_smiles, n_decoys: int,
+                    cid_max: int = 160_000_000, batch: int = 100,
+                    pause: float = 0.2, seed: int = 42,
+                    max_batches: int = 120) -> pd.DataFrame:
+    """
+    PubChem에서 무작위 화합물을 뽑아 '가정된 비활성(decoy)'으로 라벨링한다.
+    active 분자들의 분자량 5~95 백분위 범위에 맞춰 property-matched decoy를 생성
+    (DUD-E 간이 버전). 특정 타겟에 무작위 분자가 활성일 확률은 <1%라 통계적으로 타당.
+    반환: DataFrame[canonical_smiles, active(=0)].
+    """
+    import random
+    import time
+    import requests
+    from rdkit import Chem
+    from rdkit.Chem import Descriptors
+
+    os.makedirs(cfg.cache_dir, exist_ok=True)
+    cache = os.path.join(cfg.cache_dir, f"{cfg.target}_decoys.csv")
+    if os.path.exists(cache):
+        df = pd.read_csv(cache)
+        print(f"[decoy] 캐시 사용: {cache} ({len(df)}개)")
+        return df
+
+    # active 분자량 분포로 매칭 범위 결정
+    mws = [Descriptors.MolWt(m) for smi in active_smiles
+           if (m := Chem.MolFromSmiles(str(smi))) is not None]
+    lo, hi = (float(np.percentile(mws, 5)), float(np.percentile(mws, 95))) \
+        if mws else (150.0, 600.0)
+    print(f"[decoy] active 분자량 매칭 범위 {lo:.0f}–{hi:.0f} Da, 목표 {n_decoys}개 수집 중...")
+
+    rng = random.Random(seed)
+    base = "https://pubchem.ncbi.nlm.nih.gov/rest/pug"
+    active_set = {str(s) for s in active_smiles}
+    decoys: dict[str, int] = {}
+
+    for _ in range(max_batches):
+        if len(decoys) >= n_decoys:
+            break
+        cids = ",".join(str(rng.randint(1, cid_max)) for _ in range(batch))
+        props = []
+        for prop in ("SMILES,MolecularWeight", "CanonicalSMILES,MolecularWeight"):
+            try:
+                r = requests.get(f"{base}/compound/cid/{cids}/property/{prop}/JSON",
+                                 timeout=60)
+            except requests.RequestException:
+                continue
+            if r.status_code == 200:
+                props = r.json().get("PropertyTable", {}).get("Properties", [])
+                break
+        for p in props:
+            smi = p.get("SMILES") or p.get("CanonicalSMILES")
+            mw = p.get("MolecularWeight")
+            if not smi or mw is None:
+                continue
+            try:
+                mw = float(mw)
+            except (TypeError, ValueError):
+                continue
+            if lo <= mw <= hi and smi not in active_set and smi not in decoys:
+                decoys[smi] = 0
+                if len(decoys) >= n_decoys:
+                    break
+        time.sleep(pause)
+
+    df = pd.DataFrame({"canonical_smiles": list(decoys.keys()), "active": 0})
+    df.to_csv(cache, index=False)
+    print(f"[decoy] {len(df)}개 decoy 생성 → {cache}")
+    return df
+
+
 def load_chembl_csv(path: str, cfg: "Config") -> pd.DataFrame:
     """
     ChEMBL 웹사이트에서 수동으로 내려받은 activity CSV를 학습 스키마로 변환한다.
@@ -327,6 +399,24 @@ def assemble_training_data(cfg: "Config") -> pd.DataFrame:
     df = df.reset_index(drop=True)
     print(f"[data] 통합 학습셋: {len(df)}개 "
           f"(active={int(df['active'].sum())}, inactive={int((df['active']==0).sum())})")
+
+    # decoy 보강: 목표 inactive 수 = active 수 × decoy_multiplier 가 되도록 채운다.
+    if cfg.add_decoys:
+        n_act = int((df["active"] == 1).sum())
+        n_inact = int((df["active"] == 0).sum())
+        need = int(n_act * cfg.decoy_multiplier) - n_inact
+        if need > 0:
+            actives = df.loc[df["active"] == 1, "canonical_smiles"].tolist()
+            dec = generate_decoys(cfg, actives, need)
+            if not dec.empty:
+                # active가 먼저 오도록 concat → 중복 SMILES는 active 라벨 유지
+                df = pd.concat([df, dec], ignore_index=True) \
+                       .drop_duplicates("canonical_smiles").reset_index(drop=True)
+                print(f"[data] decoy 추가 후: {len(df)}개 "
+                      f"(active={int(df['active'].sum())}, "
+                      f"inactive={int((df['active']==0).sum())})")
+        else:
+            print("[data] decoy 불필요 (이미 균형).")
     return df
 
 
@@ -620,12 +710,14 @@ def main():
                         help="active 판정 pIC50 임계값 (기본: 6.0 = IC50 1uM)")
     parser.add_argument("--augment-pubchem", action="store_true",
                         help="PubChem BioAssay로 학습셋 보강 (ChEMBL이 적을 때)")
+    parser.add_argument("--add-decoys", action="store_true",
+                        help="무작위 PubChem 화합물로 decoy(가정 비활성) 추가해 불균형 해소")
     parser.add_argument("--chembl-csv", default=None,
                         help="ChEMBL 웹에서 받은 activity CSV 경로 (API 대신 사용)")
     args = parser.parse_args()
 
     cfg = Config(target=args.target, active_threshold=args.threshold,
-                 augment_pubchem=args.augment_pubchem)
+                 augment_pubchem=args.augment_pubchem, add_decoys=args.add_decoys)
     if args.chembl_csv:
         cfg.chembl_csv_path = args.chembl_csv
     run_pipeline(cfg)
