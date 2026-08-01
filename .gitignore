@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Virtual environment
+venv/
+.venv/
+env/
+
+# 프로젝트 산출물 / 캐시 (대용량, 재생성 가능)
+bioai_cache/
+*.pkl
+
+# 천연물 DB 원본 덤프 (대용량 — 각자 다운로드)
+data/
+
+# OS / IDE
+.DS_Store
+.idea/
+.vscode/
