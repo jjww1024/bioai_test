@@ -37,6 +37,14 @@ from dataclasses import dataclass
 import numpy as np
 import pandas as pd
 
+# 대용량 천연물 DB에는 깨진 SMILES가 섞여 있어 RDKit 파싱 경고가 쏟아진다.
+# 해당 분자는 코드가 자동으로 건너뛰므로(무해), 로그 노이즈만 끈다.
+try:
+    from rdkit import RDLogger
+    RDLogger.DisableLog("rdApp.*")
+except ImportError:
+    pass
+
 
 # ---------------------------------------------------------------------------
 # 0. MASLD 관련 바이오마커(타겟) 카탈로그
@@ -86,6 +94,8 @@ class Config:
     augment_pubchem: bool = False  # PubChem BioAssay로 학습셋 보강 여부
     add_decoys: bool = False        # 무작위 PubChem 화합물로 decoy(가정 비활성) 추가
     decoy_multiplier: float = 1.0   # 목표 inactive 수 = active 수 × 이 값
+    use_automl: bool = False        # FLAML AutoML로 여러 모델 자동 탐색 (RF 대신)
+    automl_time_budget: int = 60    # AutoML 탐색 시간(초)
     # ChEMBL 웹에서 수동 다운로드한 activity CSV 경로 (있으면 API 대신 이 파일 사용)
     chembl_csv_path: str = "data/chembl_activities.csv"
     # 스크리닝 라이브러리 파일 경로 (없으면 DEMO_CANDIDATES로 폴백)
@@ -484,11 +494,16 @@ def train_model(df: pd.DataFrame, cfg: Config):
         random_state=cfg.random_state, stratify=y
     )
 
-    clf = RandomForestClassifier(
-        n_estimators=300, class_weight="balanced",
-        random_state=cfg.random_state, n_jobs=-1
-    )
-    clf.fit(X_tr, y_tr)
+    if cfg.use_automl:
+        clf = _train_automl(X_tr, y_tr, cfg)
+        tag = "automl"
+    else:
+        clf = RandomForestClassifier(
+            n_estimators=300, class_weight="balanced",
+            random_state=cfg.random_state, n_jobs=-1
+        )
+        clf.fit(X_tr, y_tr)
+        tag = "rf"
 
     proba = clf.predict_proba(X_te)[:, 1]
     pred = (proba >= 0.5).astype(int)
@@ -500,11 +515,45 @@ def train_model(df: pd.DataFrame, cfg: Config):
         pass
 
     os.makedirs(cfg.cache_dir, exist_ok=True)
-    model_path = os.path.join(cfg.cache_dir, f"{cfg.target}_rf.pkl")
+    model_path = os.path.join(cfg.cache_dir, f"{cfg.target}_{tag}.pkl")
     with open(model_path, "wb") as f:
         pickle.dump(clf, f)
     print(f"[model] 저장 → {model_path}")
     return clf
+
+
+def _train_automl(X_tr, y_tr, cfg: Config):
+    """FLAML AutoML로 여러 알고리즘·하이퍼파라미터를 자동 탐색해 최적 모델을 반환.
+
+    RandomForest 하나를 고정으로 쓰는 대신, 주어진 시간(automl_time_budget) 안에
+    여러 후보 모델을 학습·비교하고 ROC-AUC가 가장 좋은 것을 고른다.
+    (모델을 '업데이트'하는 게 아니라, 매번 여러 모델을 새로 학습해 최고를 선택하는 방식)
+    """
+    from flaml import AutoML
+
+    # 설치 환경에 있는 estimator만 사용 (xgboost/lgbm 미설치 시 자동 제외)
+    candidates = ["rf", "extra_tree"]
+    for name, mod in (("lgbm", "lightgbm"), ("xgboost", "xgboost")):
+        try:
+            __import__(mod)
+            candidates.append(name)
+        except ImportError:
+            pass
+
+    print(f"[automl] FLAML 탐색 시작 (budget={cfg.automl_time_budget}s, "
+          f"후보={candidates})")
+    automl = AutoML()
+    automl.fit(
+        X_train=X_tr, y_train=y_tr,
+        task="classification", metric="roc_auc",
+        time_budget=cfg.automl_time_budget,
+        estimator_list=candidates,
+        seed=cfg.random_state, verbose=1,
+    )
+    print(f"[automl] 최적 모델: {automl.best_estimator} | "
+          f"CV ROC-AUC={1 - automl.best_loss:.3f}")
+    print(f"[automl] 최적 하이퍼파라미터: {automl.best_config}")
+    return automl
 
 
 # ---------------------------------------------------------------------------
@@ -515,14 +564,23 @@ def screen_candidates(clf, candidates: dict[str, str], cfg: Config) -> pd.DataFr
     candidates: {이름: SMILES} 딕셔너리
     반환: 각 물질의 활성 확률(activity_prob) 내림차순 DataFrame
     """
-    rows = []
+    # 1) 먼저 전부 fingerprint로 벡터화 (파싱 실패는 스킵)
+    names, smis, feats = [], [], []
     for name, smi in candidates.items():
         arr = smiles_to_fp(smi, cfg)
         if arr is None:
-            continue   # SMILES 파싱 실패 항목은 조용히 스킵 (대용량 DB에서 로그 폭주 방지)
-        prob = clf.predict_proba(arr.reshape(1, -1))[0, 1]
-        rows.append({"name": name, "smiles": smi, "activity_prob": prob})
-    out = pd.DataFrame(rows).sort_values("activity_prob", ascending=False)
+            continue
+        names.append(name); smis.append(smi); feats.append(arr)
+    if not feats:
+        print("[screen] 유효한 분자가 없습니다.")
+        return pd.DataFrame(columns=["name", "smiles", "activity_prob"])
+
+    # 2) 배치 예측: 전체를 하나의 행렬로 묶어 predict_proba를 '한 번'만 호출 (대폭 가속)
+    X = np.vstack(feats)
+    probs = clf.predict_proba(X)[:, 1]
+    out = (pd.DataFrame({"name": names, "smiles": smis, "activity_prob": probs})
+             .sort_values("activity_prob", ascending=False)
+             .reset_index(drop=True))
     print(f"\n[screen] {len(out)}개 예측 완료. 상위 20개:")
     print(out.head(20).to_string(index=False))
     return out
@@ -712,12 +770,17 @@ def main():
                         help="PubChem BioAssay로 학습셋 보강 (ChEMBL이 적을 때)")
     parser.add_argument("--add-decoys", action="store_true",
                         help="무작위 PubChem 화합물로 decoy(가정 비활성) 추가해 불균형 해소")
+    parser.add_argument("--automl", action="store_true",
+                        help="FLAML AutoML로 여러 모델 자동 탐색 (RandomForest 대신)")
+    parser.add_argument("--automl-budget", type=int, default=60,
+                        help="AutoML 탐색 시간(초, 기본 60)")
     parser.add_argument("--chembl-csv", default=None,
                         help="ChEMBL 웹에서 받은 activity CSV 경로 (API 대신 사용)")
     args = parser.parse_args()
 
     cfg = Config(target=args.target, active_threshold=args.threshold,
-                 augment_pubchem=args.augment_pubchem, add_decoys=args.add_decoys)
+                 augment_pubchem=args.augment_pubchem, add_decoys=args.add_decoys,
+                 use_automl=args.automl, automl_time_budget=args.automl_budget)
     if args.chembl_csv:
         cfg.chembl_csv_path = args.chembl_csv
     run_pipeline(cfg)

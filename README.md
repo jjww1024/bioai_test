@@ -35,7 +35,12 @@ pip install -r requirements.txt
 python bioai_test.py                    # HSD17B13, 데모 후보로 바로 실행
 python bioai_test.py --target THRB      # 다른 타겟
 python bioai_test.py --augment-pubchem  # PubChem BioAssay로 학습셋 보강
+python bioai_test.py --add-decoys       # 무작위 화합물로 decoy 추가 (불균형 해소)
+python bioai_test.py --automl           # FLAML AutoML로 여러 모델 자동 탐색
 python bioai_test.py --chembl-csv data/chembl_activities.csv  # 수동 ChEMBL CSV 사용
+
+# 실전 조합 예시 (권장):
+python bioai_test.py --augment-pubchem --add-decoys --automl --automl-budget 60
 ```
 
 천연물 DB 파일이 없으면 내장 `DEMO_CANDIDATES`로 폴백하므로 설치 직후 바로 돌아갑니다.
