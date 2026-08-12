@@ -8,6 +8,7 @@ decoy 주의: decoy는 active와 구조가 일부러 다르게(Tanimoto<=0.35) �
 그래서 '실측 inactive 396개를 CV에서 얼마나 inactive로 맞히는지'를 따로 본다
 (진짜 어려운 판별력 지표).
 """
+import sys
 import numpy as np
 import pandas as pd
 import pickle
@@ -20,9 +21,12 @@ from sklearn.metrics import (roc_auc_score, average_precision_score,
                              confusion_matrix)
 from lightgbm import LGBMClassifier
 
-SRC = "data/HSD17B13_train_with_decoys.xlsx"
-MODEL_OUT = "data/HSD17B13_screen_model.pkl"
+# 사용법: python 07_train_with_decoys.py [학습셋.xlsx] [모델출력.pkl]
+#   기본은 06(전역창) decoy. DUD-E(06b) 결과로 비교하려면 인자로 파일 지정.
+SRC = sys.argv[1] if len(sys.argv) > 1 else "data/HSD17B13_train_with_decoys.xlsx"
+MODEL_OUT = sys.argv[2] if len(sys.argv) > 2 else "data/HSD17B13_screen_model.pkl"
 NBITS = 1024
+print(f"학습셋: {SRC}")
 
 df = pd.read_excel(SRC).dropna(subset=["canonical_smiles"]).reset_index(drop=True)
 print("학습셋 구성:")

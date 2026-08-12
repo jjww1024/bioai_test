@@ -24,8 +24,10 @@ python scripts/04_make_fingerprints.py # 4종 fingerprint(ECFP4/MACCS/RDKit/Atom
 python scripts/05_train_clean.py       # IC50<=10000nM=active 라벨링 + 4종 fingerprint 학습·비교
 
 # --- decoy로 클래스 균형 → 스크리닝 ---
-python scripts/06_add_decoys.py        # DUD-E식 property-matched decoy를 PubChem에서 생성(active:inactive 1:1) → data/HSD17B13_train_with_decoys.xlsx
+python scripts/06_add_decoys.py        # DUD-E식 property-matched decoy(전역 5~95% 창) → data/HSD17B13_train_with_decoys.xlsx
+python scripts/06b_add_decoys_dude.py  # 정식 DUD-E(active별 개별 매칭) decoy → data/HSD17B13_train_with_decoys_dude.xlsx
 python scripts/07_train_with_decoys.py # 균형 데이터로 4종 fingerprint 재학습 → data/HSD17B13_screen_model.pkl (실측 inactive 판별력도 별도 리포트)
+#   └ DUD-E 버전 학습:  python scripts/07_train_with_decoys.py data/HSD17B13_train_with_decoys_dude.xlsx data/HSD17B13_screen_model_dude.pkl
 python scripts/08_screen_npass.py      # NPASS 천연물 9만개 스크리닝(활성확률 + 알려진 active와 유사도) → data/HSD17B13_npass_hits.xlsx
 
 # --- descriptor(물성) 학습 & 해석 ---
