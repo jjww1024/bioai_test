@@ -54,9 +54,30 @@ HSD17B13 (UniProt **Q7Z5P4**)의 첫 결정구조가 2023년 공개됨 (Nat. Com
 
 → 이 세 가지를 통과하면 ML 점수가 외삽이더라도 **구조적 근거**가 생김. 그 후보만 실험(효소활성 assay)으로 넘김.
 
+## 로컬(VS Code) 자동 실행 — 13·14 스크립트
+
+수동 절차(1~5) 대신 아래 두 스크립트로 자동화. 윈도우 로컬용(smina + OpenBabel).
+
+**① 도구 설치 (한 번만)**
+```bash
+conda install -c conda-forge openbabel smina
+# smina가 conda로 안 깔리면 공식 smina.exe를 받아 PATH에 두거나 환경변수 SMINA=경로
+```
+
+**② 실행 (프로젝트 루트에서, venv 파이썬으로)**
+```bash
+python scripts/13_prep_receptor.py   # 8G89 다운로드 → 물 제거·NAD 유지·저해제(YXW) 분리 → receptor.pdbqt
+python scripts/14_run_docking.py     # 후보 33개 + 대조군(YXW redock, BI-3231) 도킹 → results/docking_scores.csv
+```
+
+- 8G89의 공결정 저해제는 **YXW**(자동 탐지됨), 보조인자 **NAD** 유지.
+- 14는 리간드당 수십 초~수 분(exhaustiveness=8) → 33개 + 대조군에 30~60분 예상. 빠른 테스트는 14 상단 `EXHAUST=4`.
+- 결과 해석: 후보 결합에너지가 **대조군(YXW·BI-3231) 기준선 이하(더 음수)** 이면 유망 → PyMOL로 포켓 상호작용 확인 후 실험.
+
 ## 도구 (모두 무료)
 
-RCSB PDB · OpenBabel · Meeko/ADFR suite(MGLTools) · AutoDock Vina(또는 Smina/QuickVina) · PyMOL(시각화)
+RCSB PDB · OpenBabel · smina(또는 AutoDock Vina/QuickVina) · PyMOL(시각화)
+- 로컬(윈도우)은 **smina + OpenBabel** 권장(PDBQT 변환 부담↓). Meeko/ADFR는 선택.
 
 ## 참고
 
