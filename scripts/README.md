@@ -31,6 +31,11 @@ python scripts/08_screen_npass.py      # NPASS 천연물 9만개 스크리닝(�
 # --- descriptor(물성) 학습 & 해석 ---
 python scripts/09_make_descriptors.py  # RDKit 2D descriptor 217종 계산 → data/HSD17B13_descriptors.xlsx
 python scripts/10_train_descriptors.py # descriptor로 학습 + 어떤 물성이 활성과 연관되나 해석 → data/HSD17B13_descriptor_importance.csv
+
+# --- 결합 모델 & 도킹 준비 ---
+python scripts/11_train_combined.py    # fingerprint+descriptor 결합 vs 단일 비교
+python scripts/12_prep_docking.py      # 상위 후보 3D 최소화 → data/docking/hsd17b13_ligands.sdf (+ manifest)
+# 도킹 프로토콜: scripts/DOCKING.md (수용체 PDB 8G89, 대조군 BI-3231 등)
 ```
 
 ## 라벨링 기준 (05·07·09·10 공통)
