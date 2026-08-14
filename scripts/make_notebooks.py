@@ -40,7 +40,7 @@ def clean_header(line):
     return line.lstrip("#").strip().strip("-=").strip()
 
 
-def convert(path):
+def convert(path, outdir=OUTDIR):
     src = open(path, encoding="utf-8").read()
     lines = src.splitlines()
     # 1) docstring → 제목 마크다운
@@ -111,7 +111,7 @@ def convert(path):
                                       "name": "python3"},
                        "language_info": {"name": "python"}},
           "nbformat": 4, "nbformat_minor": 4}   # minor 4: 셀 id 불필요(호환성)
-    out = os.path.join(OUTDIR, base[:-3] + ".ipynb")
+    out = os.path.join(outdir, base[:-3] + ".ipynb")
     with open(out, "w", encoding="utf-8") as f:
         json.dump(nb, f, ensure_ascii=False, indent=1)
     return out, len(cells)
@@ -123,6 +123,8 @@ if os.path.exists("bioai_test.py"):
     targets.append("bioai_test.py")   # 루트의 올인원 스캐폴드도 포함
 print(f"변환 대상 {len(targets)}개 → {OUTDIR}/")
 for p in targets:
-    out, ncell = convert(p)
-    print(f"  {os.path.basename(p):28s} → {os.path.basename(out):30s} ({ncell} cells)")
+    # 루트의 올인원 스캐폴드(bioai_test)는 루트에, 나머지는 notebooks/에
+    outdir = "." if os.path.basename(p) == "bioai_test.py" else OUTDIR
+    out, ncell = convert(p, outdir)
+    print(f"  {os.path.basename(p):28s} → {out:38s} ({ncell} cells)")
 print("완료")
