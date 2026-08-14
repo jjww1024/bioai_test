@@ -57,6 +57,14 @@ def convert(path):
     cells = [md_cell(title), code_cell(SETUP)]
 
     body = lines[doc_end:]
+    # 최상위 `if __name__ == "__main__":` 블록은 노트북에서 argparse가 깨지므로 잘라내고
+    # 뒤에 안전한(주석 처리된) 실행 예시 셀로 대체한다.
+    has_main = False
+    for k, ln in enumerate(body):
+        if ln.startswith("if __name__"):
+            body = body[:k]
+            has_main = True
+            break
     i, n = 0, len(body)
     buf = []
 
@@ -86,6 +94,18 @@ def convert(path):
             i += 1
     flush_code()
 
+    if has_main:
+        cells.append(md_cell(
+            "### 노트북에서 실행하기\n\n"
+            "원본의 `argparse` 기반 `main()`은 CLI 전용이라 노트북에선 아래처럼 "
+            "`run_pipeline`을 직접 호출한다. (자동 실행되지 않도록 주석 처리)"))
+        cells.append(code_cell(
+            "# cfg = Config(target=\"HSD17B13\")\n"
+            "# run_pipeline(cfg)\n"
+            "#\n"
+            "# 주의: 이 스캐폴드는 ChEMBL API 자동수집을 시도한다(현재 불안정).\n"
+            "# 신뢰가능한 HSD17B13 파이프라인은 scripts/(01~16) 노트북을 사용."))
+
     nb = {"cells": cells,
           "metadata": {"kernelspec": {"display_name": "Python 3", "language": "python",
                                       "name": "python3"},
@@ -99,6 +119,8 @@ def convert(path):
 
 targets = sorted(p for p in glob.glob("scripts/*.py")
                  if re.match(r"\d", os.path.basename(p)))   # 번호로 시작하는 파이프라인만
+if os.path.exists("bioai_test.py"):
+    targets.append("bioai_test.py")   # 루트의 올인원 스캐폴드도 포함
 print(f"변환 대상 {len(targets)}개 → {OUTDIR}/")
 for p in targets:
     out, ncell = convert(p)
