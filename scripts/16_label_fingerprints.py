@@ -85,7 +85,7 @@ for sheet in SHEETS:
     lab_num = [make_label(v, r) for v, r in zip(df["ic50_nM"], df["relation"])]
     activity = ["active" if x == 1 else ("inactive" if x == 0 else "unlabeled")
                 for x in lab_num]
-    df.insert(len(META), "label", [("" if pd.isna(x) else int(x)) for x in lab_num])
+    df.insert(len(META), "potency", [("" if pd.isna(x) else int(x)) for x in lab_num])
     df.insert(len(META) + 1, "activity", activity)
     labeled_sheets[sheet] = df
     sheet_labels[sheet] = [(-9 if pd.isna(x) else int(x)) for x in lab_num]
