@@ -6,9 +6,9 @@ descriptor = 분자의 물리화학·위상 수치 (MW, logP, TPSA, 방향족고
 fingerprint(0/1 비트)와 달리 연속값이라 ML에 쓸 땐 결측/무한대 정리 + 스케일링 필요.
 
 출력:
-  data/HSD17B13_descriptors.xlsx  (canonical_smiles, ic50_nM, relation, sources,
+  data/archive/HSD17B13_descriptors.xlsx  (canonical_smiles, ic50_nM, relation, sources,
                                     label, + descriptor ~210열)
-  data/HSD17B13_descriptors.csv
+  data/archive/HSD17B13_descriptors.csv
 """
 import numpy as np
 import pandas as pd
@@ -17,9 +17,9 @@ from rdkit.Chem import Descriptors
 from rdkit import RDLogger
 RDLogger.DisableLog("rdApp.*")
 
-SRC = "data/HSD17B13_IC50_merged.xlsx"
-OUT_XLSX = "data/HSD17B13_descriptors.xlsx"
-OUT_CSV = "data/HSD17B13_descriptors.csv"
+SRC = "data/interim/HSD17B13_IC50_merged.xlsx"
+OUT_XLSX = "data/archive/HSD17B13_descriptors.xlsx"
+OUT_CSV = "data/archive/HSD17B13_descriptors.csv"
 ACTIVE_MAX = 10000.0
 
 

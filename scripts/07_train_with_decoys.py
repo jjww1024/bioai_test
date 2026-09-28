@@ -23,8 +23,8 @@ from lightgbm import LGBMClassifier
 
 # 사용법: python 07_train_with_decoys.py [학습셋.xlsx] [모델출력.pkl]
 #   기본은 06(전역창) decoy. DUD-E(06b) 결과로 비교하려면 인자로 파일 지정.
-SRC = sys.argv[1] if len(sys.argv) > 1 else "data/HSD17B13_train_with_decoys.xlsx"
-MODEL_OUT = sys.argv[2] if len(sys.argv) > 2 else "data/HSD17B13_screen_model.pkl"
+SRC = sys.argv[1] if len(sys.argv) > 1 else "data/archive/HSD17B13_train_with_decoys.xlsx"
+MODEL_OUT = sys.argv[2] if len(sys.argv) > 2 else "data/archive/HSD17B13_screen_model.pkl"
 NBITS = 1024
 print(f"학습셋: {SRC}")
 

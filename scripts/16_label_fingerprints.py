@@ -13,7 +13,7 @@
   ③ 시트 간 일관성: 같은 물질이 4시트에서 동일 라벨?
   ④ 원본 대조: 병합원본(same_dedup_keepdiff)에 같은 (smiles,ic50) 존재?
 
-출력: data/HSD17B13_fingerprints_labeled.xlsx (원본 열려있어도 안전하게 새 파일)
+출력: data/archive/HSD17B13_fingerprints_labeled.xlsx (원본 열려있어도 안전하게 새 파일)
 """
 import sys
 try:
@@ -27,9 +27,9 @@ from rdkit.Chem import MACCSkeys, rdFingerprintGenerator
 from rdkit import RDLogger
 RDLogger.DisableLog("rdApp.*")
 
-SRC = "data/HSD17B13_fingerprints.xlsx"
-MERGED = "data/HSD17B13_IC50_merged.xlsx"
-OUT = "data/HSD17B13_fingerprints_labeled.xlsx"
+SRC = "data/processed/HSD17B13_fingerprints.xlsx"
+MERGED = "data/interim/HSD17B13_IC50_merged.xlsx"
+OUT = "data/archive/HSD17B13_fingerprints_labeled.xlsx"
 ACTIVE_MAX = 10000.0
 SHEETS = ["ECFP4", "MACCS", "RDKit", "AtomPair"]
 META = ["canonical_smiles", "ic50_nM", "relation", "sources"]

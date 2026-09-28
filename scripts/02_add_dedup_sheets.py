@@ -6,7 +6,7 @@
 import numpy as np
 import pandas as pd
 
-OUT = "data/HSD17B13_IC50_merged.xlsx"
+OUT = "data/interim/HSD17B13_IC50_merged.xlsx"
 
 df = pd.read_excel(OUT, sheet_name="all_data")
 # IC50 중심 시트이므로 canonical/IC50 유효한 행만

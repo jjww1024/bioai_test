@@ -8,8 +8,8 @@
 - 결과: 중요 descriptor 상위 + active/inactive 평균 비교(방향)까지
 
 출력:
-  data/HSD17B13_descriptor_importance.csv
-  data/HSD17B13_descriptor_model.pkl   (SimpleImputer+LGBM Pipeline — 신규 예측 시 그대로 적용)
+  data/archive/HSD17B13_descriptor_importance.csv
+  data/archive/HSD17B13_descriptor_model.pkl   (SimpleImputer+LGBM Pipeline — 신규 예측 시 그대로 적용)
 """
 import numpy as np
 import pandas as pd
@@ -21,9 +21,9 @@ from sklearn.pipeline import Pipeline
 from sklearn.impute import SimpleImputer
 from lightgbm import LGBMClassifier
 
-SRC = "data/HSD17B13_descriptors.csv"
-IMP_OUT = "data/HSD17B13_descriptor_importance.csv"
-MODEL_OUT = "data/HSD17B13_descriptor_model.pkl"
+SRC = "data/archive/HSD17B13_descriptors.csv"
+IMP_OUT = "data/archive/HSD17B13_descriptor_importance.csv"
+MODEL_OUT = "data/archive/HSD17B13_descriptor_model.pkl"
 META = ["canonical_smiles", "ic50_nM", "relation", "sources", "label"]
 
 df = pd.read_csv(SRC)

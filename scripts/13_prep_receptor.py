@@ -7,7 +7,7 @@
 - OpenBabel로 수용체 PDBQT 변환(수소·전하 추가, pH 7.4)
 
 필요 도구: OpenBabel (conda install -c conda-forge openbabel)
-출력: data/docking/receptor/  (8G89.pdb, receptor.pdb, receptor.pdbqt, ref_ligand.pdb)
+출력: data/interim/docking/receptor/  (8G89.pdb, receptor.pdb, receptor.pdbqt, ref_ligand.pdb)
 """
 import os
 import sys
@@ -16,7 +16,7 @@ import subprocess
 import urllib.request
 from collections import defaultdict
 
-OUTDIR = "data/docking/receptor"
+OUTDIR = "data/interim/docking/receptor"
 PDB_ID = "8G89"
 os.makedirs(OUTDIR, exist_ok=True)
 RAW = os.path.join(OUTDIR, f"{PDB_ID}.pdb")

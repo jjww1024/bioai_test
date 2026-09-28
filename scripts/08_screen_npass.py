@@ -21,11 +21,11 @@ from rdkit.Chem import MACCSkeys, rdFingerprintGenerator
 from rdkit import RDLogger
 RDLogger.DisableLog("rdApp.*")
 
-MODEL = "data/HSD17B13_screen_model.pkl"
-NPASS = "data/npass_structures.tsv"
-TRAIN = "data/HSD17B13_train_with_decoys.xlsx"
-OUT_XLSX = "data/HSD17B13_npass_hits.xlsx"
-OUT_CSV = "data/HSD17B13_npass_ranked_full.csv"
+MODEL = "data/archive/HSD17B13_screen_model.pkl"
+NPASS = "data/raw/npass_structures.tsv"
+TRAIN = "data/archive/HSD17B13_train_with_decoys.xlsx"
+OUT_XLSX = "data/archive/HSD17B13_npass_hits.xlsx"
+OUT_CSV = "data/archive/HSD17B13_npass_ranked_full.csv"
 TOP_N = 300
 
 with open(MODEL, "rb") as f:

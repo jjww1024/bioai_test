@@ -9,9 +9,9 @@ from rdkit import RDLogger
 RDLogger.DisableLog("rdApp.*")
 
 # 데이터는 프로젝트의 data/ 폴더에 아래 이름으로 두세요 (data/는 .gitignore 처리됨).
-BINDINGDB = "data/bindingdb_hsd17b13.tsv"
-CHEMBL = "data/chembl_hsd17b13.tsv"
-OUT = "data/HSD17B13_IC50_merged.xlsx"
+BINDINGDB = "data/raw/bindingdb_hsd17b13.tsv"
+CHEMBL = "data/raw/chembl_hsd17b13.tsv"
+OUT = "data/interim/HSD17B13_IC50_merged.xlsx"
 
 
 def parse_value(x):

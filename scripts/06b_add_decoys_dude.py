@@ -11,8 +11,8 @@ DUD-E 알고리즘(Mysinger 2012)을 로컬 재현:
 소스는 ZINC 대신 PubChem(웹서버 불필요, 대기 없음).
 
 출력:
-  data/HSD17B13_decoys_dude.csv
-  data/HSD17B13_train_with_decoys_dude.xlsx  (canonical_smiles, label, source)
+  data/interim/HSD17B13_decoys_dude.csv
+  data/archive/HSD17B13_train_with_decoys_dude.xlsx  (canonical_smiles, label, source)
 """
 import time
 import random
@@ -24,9 +24,9 @@ from rdkit.Chem import Descriptors, rdMolDescriptors, rdFingerprintGenerator
 from rdkit import RDLogger
 RDLogger.DisableLog("rdApp.*")
 
-SRC = "data/HSD17B13_IC50_merged.xlsx"
-OUT_XLSX = "data/HSD17B13_train_with_decoys_dude.xlsx"
-OUT_CSV = "data/HSD17B13_decoys_dude.csv"
+SRC = "data/interim/HSD17B13_IC50_merged.xlsx"
+OUT_XLSX = "data/archive/HSD17B13_train_with_decoys_dude.xlsx"
+OUT_CSV = "data/interim/HSD17B13_decoys_dude.csv"
 ACTIVE_MAX = 10000.0
 TANIMOTO_MAX = 0.35
 MAX_CID = 170_000_000

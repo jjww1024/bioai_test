@@ -7,7 +7,7 @@ import pandas as pd
 from openpyxl import load_workbook
 from openpyxl.styles import PatternFill
 
-XL = "data/HSD17B13_IC50_merged.xlsx"
+XL = "data/interim/HSD17B13_IC50_merged.xlsx"
 
 df = pd.read_excel(XL, sheet_name="all_data").dropna(subset=["canonical_smiles", "ic50_nM"])
 # 정확한(=) 값만 수치 집계에 사용, 부등호(>,<)는 따로 카운트

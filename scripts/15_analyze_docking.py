@@ -8,7 +8,7 @@
 - 후보/대조군의 무거운 원자 수 계산 → LE 재랭킹
 - 알려진 저해제(YXW, BI-3231)의 LE를 기준선으로, 'affinity도 좋고 LE도 기준 이상'인
   후보를 진짜 유망군으로 표시
-출력: data/docking/results/docking_analysis.csv
+출력: data/interim/docking/results/docking_analysis.csv
 """
 import os
 import json
@@ -19,10 +19,10 @@ from rdkit import Chem
 from rdkit import RDLogger
 RDLogger.DisableLog("rdApp.*")
 
-RESDIR = "data/docking/results"
+RESDIR = "data/interim/docking/results"
 SCORES = os.path.join(RESDIR, "docking_scores.csv")
-MANIFEST = "data/docking/docking_manifest.csv"
-REF_LIG = "data/docking/receptor/ref_ligand.pdb"
+MANIFEST = "data/interim/docking/docking_manifest.csv"
+REF_LIG = "data/interim/docking/receptor/ref_ligand.pdb"
 OUT = os.path.join(RESDIR, "docking_analysis.csv")
 
 scores = pd.read_csv(SCORES)

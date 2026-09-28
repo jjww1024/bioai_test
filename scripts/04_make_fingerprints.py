@@ -13,8 +13,8 @@ from rdkit.Chem import MACCSkeys, rdFingerprintGenerator
 from rdkit import RDLogger
 RDLogger.DisableLog("rdApp.*")
 
-SRC = "data/HSD17B13_IC50_merged.xlsx"
-OUT = "data/HSD17B13_fingerprints.xlsx"
+SRC = "data/interim/HSD17B13_IC50_merged.xlsx"
+OUT = "data/processed/HSD17B13_fingerprints.xlsx"
 NBITS = 1024
 
 df = pd.read_excel(SRC, sheet_name="same_dedup_keepdiff")

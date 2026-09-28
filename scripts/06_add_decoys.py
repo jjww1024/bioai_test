@@ -10,8 +10,8 @@ PubChem에서 property-matched 방식으로 뽑아, active:inactive를 1:1로 �
   ④ 알려진 active/inactive(및 중복)와 canonical SMILES 겹치면 제외
 
 출력:
-  data/HSD17B13_decoys.csv                (decoy canonical_smiles 목록)
-  data/HSD17B13_train_with_decoys.xlsx    (canonical_smiles, label, source)
+  data/interim/HSD17B13_decoys.csv                (decoy canonical_smiles 목록)
+  data/archive/HSD17B13_train_with_decoys.xlsx    (canonical_smiles, label, source)
 """
 import time
 import random
@@ -23,9 +23,9 @@ from rdkit.Chem import Descriptors, rdMolDescriptors, rdFingerprintGenerator
 from rdkit import RDLogger
 RDLogger.DisableLog("rdApp.*")
 
-SRC = "data/HSD17B13_IC50_merged.xlsx"
-OUT_XLSX = "data/HSD17B13_train_with_decoys.xlsx"
-OUT_CSV = "data/HSD17B13_decoys.csv"
+SRC = "data/interim/HSD17B13_IC50_merged.xlsx"
+OUT_XLSX = "data/archive/HSD17B13_train_with_decoys.xlsx"
+OUT_CSV = "data/interim/HSD17B13_decoys.csv"
 ACTIVE_MAX = 10000.0
 TANIMOTO_MAX = 0.35
 MAX_CID = 170_000_000

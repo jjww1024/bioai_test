@@ -1,13 +1,13 @@
 # -*- coding: utf-8 -*-
 """[도킹 2단계] smina로 HSD17B13 후보 도킹 & 랭킹. (VS Code 로컬용)
 
-- 후보 33개(data/docking/hsd17b13_ligands.sdf)를 8G89 포켓에 도킹
+- 후보 33개(data/interim/docking/hsd17b13_ligands.sdf)를 8G89 포켓에 도킹
 - 대조군: 공결정 저해제 redocking(양성), BI-3231(알려진 저해제, PubChem 자동 조회)
 - autobox = 기준 저해제 위치 / 결합에너지(kcal/mol, 낮을수록 강함)로 랭킹
 
 필요 도구: smina (conda install -c conda-forge smina  또는 공식 smina.exe를 PATH에)
            먼저 13_prep_receptor.py 실행 필요.
-출력: data/docking/results/docking_scores.csv  + 각 리간드 포즈(out_*.pdbqt)
+출력: data/interim/docking/results/docking_scores.csv  + 각 리간드 포즈(out_*.pdbqt)
 """
 import os
 import re
@@ -23,12 +23,12 @@ from rdkit.Chem import AllChem
 from rdkit import RDLogger
 RDLogger.DisableLog("rdApp.*")
 
-RECDIR = "data/docking/receptor"
+RECDIR = "data/interim/docking/receptor"
 REC_PDBQT = os.path.join(RECDIR, "receptor.pdbqt")
 REF_LIG = os.path.join(RECDIR, "ref_ligand.pdb")
-LIGANDS = "data/docking/hsd17b13_ligands.sdf"
-MANIFEST = "data/docking/docking_manifest.csv"
-RESDIR = "data/docking/results"
+LIGANDS = "data/interim/docking/hsd17b13_ligands.sdf"
+MANIFEST = "data/interim/docking/docking_manifest.csv"
+RESDIR = "data/interim/docking/results"
 OUT_CSV = os.path.join(RESDIR, "docking_scores.csv")
 EXHAUST = 8          # 정확도(↑느림). 빠른 테스트는 4
 AUTOBOX_ADD = 4      # 기준 리간드 경계 + Å

@@ -17,7 +17,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.impute import SimpleImputer
 from lightgbm import LGBMClassifier
 
-SRC = "data/HSD17B13_descriptors.csv"   # canonical_smiles + label + descriptor 217
+SRC = "data/archive/HSD17B13_descriptors.csv"   # canonical_smiles + label + descriptor 217
 META = ["canonical_smiles", "ic50_nM", "relation", "sources", "label"]
 NBITS = 1024
 

@@ -12,7 +12,7 @@ from sklearn.metrics import (roc_auc_score, classification_report,
                              confusion_matrix, average_precision_score)
 from lightgbm import LGBMClassifier
 
-SRC = "data/HSD17B13_IC50_merged.xlsx"
+SRC = "data/interim/HSD17B13_IC50_merged.xlsx"
 ACTIVE_MAX = 10000.0   # IC50 <= 10000nM => active
 NBITS = 1024
 

@@ -6,8 +6,8 @@ ML 외삽 문제를 우회해 '실제 단백질 포켓 결합'을 구조적으�
 매니페스트: prob, 유사도, MW, logP, 회전결합수(도킹 유연성), 3D 생성 성공여부
 
 출력:
-  data/docking/hsd17b13_ligands.sdf   (도킹용 3D 리간드 묶음)
-  data/docking/docking_manifest.csv
+  data/interim/docking/hsd17b13_ligands.sdf   (도킹용 3D 리간드 묶음)
+  data/interim/docking/docking_manifest.csv
 """
 import os
 import numpy as np
@@ -17,8 +17,8 @@ from rdkit.Chem import AllChem, Descriptors, rdMolDescriptors
 from rdkit import RDLogger
 RDLogger.DisableLog("rdApp.*")
 
-SRC = "data/HSD17B13_npass_ranked_full.csv"
-OUTDIR = "data/docking"
+SRC = "data/archive/HSD17B13_npass_ranked_full.csv"
+OUTDIR = "data/interim/docking"
 SDF = os.path.join(OUTDIR, "hsd17b13_ligands.sdf")
 MAN = os.path.join(OUTDIR, "docking_manifest.csv")
 PROB_MIN = 0.7
