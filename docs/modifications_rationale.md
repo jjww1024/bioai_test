@@ -174,7 +174,19 @@
 - **내용:** Sahigara — 학습 화학공간 밖 예측은 신뢰도가 별도로 평가돼야 함(적용영역). Geirhos — 분포 내 지표가 좋아도 분포 밖(out-of-distribution) 테스트에서 지름길 학습이 드러남.
 - **참고한 부분:** **분포 밖 고정 테스트 세트**를 상시 유지하라는 원칙. 프로브 3종이 최소 버전.
 
-### (f) 결과 요약 — 개선과 대가
+### (f) IC50 측정값 충돌(>100배) 물질 제외
+- **무엇을:** `03_robust_dedup`이 `confidence == 'CONFLICT (>100x)'`로 판정한 물질(같은 구조인데 보고된 IC50이 100배 이상 갈리는 것)을 노트북 17 커레이션에서 **active/inactive 어느 쪽으로도 넣지 않고 제외**. 예: `US20250340546, Example 26` 8,095배 / `CHEMBL5411903` 2,260배 차이.
+  - 03은 원래 `recommend_keep=False`로 표시만 했고 17은 이 플래그를 쓰지 않아 **18건 전부 active로 학습에 들어가 있었음** → 이번에 실제로 끊어냄.
+  - 비교는 염·호변이성질체 차이를 흡수하려고 InChIKey 기준(`clean()` 통과 후)으로 수행.
+- **왜:** 어느 값이 맞는지 알 수 없는 물질은 **라벨 자체가 미지**다. 임계값(10µM/20µM) 어느 쪽에 놓느냐로 active↔inactive가 뒤집히므로, 넣으면 라벨 노이즈를 주입하는 것과 같다. 공개 활성 데이터의 정상적인 assay 간 편차는 **0.5 log(약 3배)** 수준이고, 100배(2 log)는 그 범위를 한참 넘어 **서로 다른 assay를 섞었거나 기록 오류**임을 뜻한다.
+- **레퍼런스:**
+  - Kalliokoski, Kramer, Vulpetti, Gedeck (2013) *Comparability of Mixed IC50 Data — A Statistical Analysis*, PLOS ONE 8:e61007.
+  - Kramer, Kalliokoski, Gedeck, Vulpetti (2012) *The Experimental Uncertainty of Heterogeneous Public Ki Data*, J. Med. Chem. 55:5165.
+  - Fourches, Muratov, Tropsha (2010) *Trust, But Verify: On the Importance of Chemical Structure Curation in Cheminformatics and QSAR Modeling Research*, JCIM 50:1189.
+- **내용:** Kalliokoski — ChEMBL의 서로 다른 assay에서 측정된 동일 물질 IC50의 표준편차는 약 0.5 log 단위이며, 이보다 크게 벌어지면 assay가 비교 불가능한 것. Kramer — 공개 Ki 데이터의 평균 오차는 0.44 log 단위. Fourches — 모순되는(contradictory) 레코드는 QSAR 학습 전 큐레이션 단계에서 **제거**가 표준 절차.
+- **참고한 부분:** ① "정상 편차 ≈0.5 log" 기준 → 100배(2 log) 충돌은 노이즈로 간주 ② Fourches의 "모순 레코드 제거" 큐레이션 원칙을 커레이션 코드에 반영.
+
+### (g) 결과 요약 — 개선과 대가
 - **개선:** test MCC 0.866 → **0.892**, 핵심 정직지표 **real_inactive 정답률 0.63 → 0.84**, Brier 0.032 → 0.026.
 - **대가:** 신규 active 710개가 **할로겐 99% / NP≥1 0개**(전부 제약사 특허 합성 시리즈) → 전체 active 할로겐율 89%→91%, NP 중앙값 −1.09→−0.99. **GW-4064 0.790→0.900**(위양성 악화), α-Terthienyl 0.096→0.120(여전히 위음성).
 - **해석:** 공개 데이터를 더 모아도 전부 같은 합성 계열이라 **천연물 도메인 외삽은 개선되지 않음**. 근본 해법은 (i) 천연물 쪽 실측 라벨 확보 또는 (ii) 구조 기반 도킹(8G9V/YYC) 교차검증.

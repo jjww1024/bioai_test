@@ -10,7 +10,7 @@
 
 | 순서 | 노트북 | 역할 |
 |---|---|---|
-| 1 | `01_merge_ic50` | 데이터 수집 — BindingDB + ChEMBL IC50 합치기 |
+| 1 | `01_merge_ic50` | 데이터 수집 — BindingDB + ChEMBL + **PubChem** IC50 합치기(nM 통일) |
 | 2 | `02_add_dedup_sheets` | 전처리 — 중복 정리 시트 추가 |
 | 3 | `03_robust_dedup` | 전처리 — 값 신뢰도 기반 중복 제거 → curated ligands |
 | 4 | `17_dude_workflow` | 학습셋 — DUD-E decoy 생성 + 1:1/1:5/1:10 세트 |
@@ -24,6 +24,34 @@
 | 11 | `08b_screen_libraries_repr` | 스크리닝 — FooDB·NPASS·COCONUT 3개 DB |
 
 > 데이터→전처리→피처→학습셋→분할→학습→스크리닝. 이 폴더만 보면 전체 흐름이 완결됩니다.
+
+(평가: `23b_evaluate_ensemble` 6분할 평가+지표표+프로브, `23c_calibrate_threshold` 확률보정·임계값.
+후보 필터: `08c_nplikeness_filter` → `08d_provenance_filter`, `08e_food_phytochemical_screen`.
+환경 점검: `00_check_env`.)
+
+---
+
+## 🏷️ 파일명 날짜 스탬프 규칙 (`_paths.py`)
+
+파이프라인이 **만드는** 모든 파일은 이름 앞에 **`YYMMDD_`** 가 붙습니다 → 파일명만 보고 최신본을 구분.
+
+```
+data/processed/261010_train_1to1.csv
+data/models/261010_HSD17B13_repr_ensemble.pkl
+```
+
+노트북은 경로를 직접 쓰지 않고 `pipeline/_paths.py`의 함수 두 개를 씁니다.
+
+| 함수 | 용도 | 동작 |
+|---|---|---|
+| `out("data/x/name.csv")` | **쓰기** | `data/x/261010_name.csv` — 오늘 스탬프를 붙임 |
+| `latest("data/x/name.csv")` | **읽기** | 스탬프가 **가장 큰(최신)** 파일을 자동 선택. 스탬프본이 없으면 무스탬프 원본(예: WEKA 수동 선택본) |
+| `which("data/x/name.csv")` | 진단 | 그 이름으로 존재하는 모든 스탬프본을 최신순 나열 |
+
+**파이프라인을 새로 돌릴 때는 `_paths.py`의 `STAMP = "261010"` 한 줄만 새 날짜로 바꾸면 됩니다.**
+노트북별로 날짜를 적지 않으므로 스탬프가 서로 엇갈릴 수 없고, 이전 결과는 옛 스탬프 이름으로 그대로 남습니다.
+
+> 예외: `data/raw/`(외부 원본, 손대지 않음)와 `data/interim/dude_decoys`·`dude_input`(폴더)은 스탬프를 붙이지 않습니다.
 
 ---
 
