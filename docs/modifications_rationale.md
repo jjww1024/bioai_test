@@ -138,6 +138,47 @@
 - **내용:** 검증 지표가 배포 도메인(천연물)을 대표 못 하면 "검증 1등"이 목표엔 최선이 아님(도메인 시프트). Sahigara — 예측 대상이 학습 화학공간 밖이면 신뢰도 낮음.
 - **참고한 부분:** 도메인 시프트 시 지표-목표 불일치. **주의:** 프로브 2개에 기댄 임시 휴리스틱(정석은 천연물 검증셋으로 자동선택 — 향후).
 
+## 10/10 — 데이터 재수집 + PubChem 3번째 소스 + 전 파이프라인 재실행
+
+### (a) PubChem BioAssay를 3번째 데이터 소스로 추가
+- **무엇을:** UniProt Q7Z5P4 관련 PubChem AID 34건에서 IC50 레코드 2,812건(고유 CID 2,422) 수집 → 노트북 01에서 BindingDB·ChEMBL과 병합. 고유 물질 2,686 → 3,253, active 2,049 → 2,759.
+- **왜:** HSD17B13 공개 활성 데이터가 절대적으로 부족(active 2,049 / real_inactive 200). BindingDB·ChEMBL만으로는 특허 유래 데이터 상당수가 누락됨. 데이터 양 자체가 QSAR 성능의 1차 제약.
+- **레퍼런스:** Kim 등 (2023) *PubChem 2023 update*, Nucleic Acids Research 51:D1373. / Tetko 등 (2016) *BigChem: Challenges and Opportunities for Big Data Analysis in Chemistry*, Molecular Informatics 35:615.
+- **내용:** PubChem BioAssay는 ChEMBL·특허(SureChEMBL)·문헌을 통합 색인하며, assay별 `activity_outcome_method`(1=Screening, 2=Confirmatory)로 품질을 구분 제공. BigChem — 공개 데이터 통합 시 소스별 단위·품질 정규화가 필수.
+- **참고한 부분:** ① `activity_outcome_method=2`(확정시험)만 사실상 수집되어 HTS 단일농도 잡음이 아님을 확인 ② **단위 정규화**: PubChem `IC50` 컬럼=NANOMOLAR, `PubChem Standard Value`=MICROMOLAR (헤더 설명행에서 확인) — 처음 전부 µM로 읽어 1,000배 부풀려진 것을 바로잡음.
+
+### (b) ChEMBL 구분자 자동판별 (`sniff_sep`)
+- **무엇을:** ChEMBL 내보내기 파일의 구분자를 헤더 첫 줄에서 `;` / tab / `,` 중 최다 출현 문자로 판별.
+- **왜:** ChEMBL 웹 내보내기는 다운로드 시점·브라우저 로케일에 따라 구분자가 바뀜(2026-08본=tab, 2026-10본=`;`). 하드코딩하면 재다운로드마다 깨짐.
+- **레퍼런스:** 없음(엔지니어링 수정). 실측: `261010 Chembl ... .csv`는 `;`, 기존 `chembl_hsd17b13.tsv`는 tab, **내용은 동일**.
+
+### (c) 노트북 17 `REUSE_CLEAN` 모드 (decoy 재검증)
+- **무엇을:** 원시 DUD-E `.picked`를 다시 파싱하지 않고, 기존 `decoys_clean.csv`를 **새 active 기준으로만 재검증**(active/inactive InChIKey 겹침 제거 + ECFP4 Tanimoto 재계산 ≤0.35). 121,992 → 121,952 (40개 제거).
+- **왜:** active가 710개 늘었으므로 기존 decoy 중 일부가 (i) 새 active와 동일 물질이거나 (ii) 유사도 상한을 넘을 수 있음 → 라벨 오염·analogue bias. 반면 원시 decoy 풀 자체는 변하지 않았으므로 전체 재파싱은 불필요.
+- **레퍼런스:** Mysinger 등 (2012) *Directory of Useful Decoys, Enhanced (DUD-E)*, J. Med. Chem. 55:6582. / Sieg, Flachsenberg, Rarey (2019) *In Need of Bias Control: Evaluating Chemical Data for Machine Learning in Structure-Based Virtual Screening*, JCIM 59:947.
+- **내용:** DUD-E — decoy는 active와 물성은 비슷하되 **구조(토폴로지)는 달라야** 함. Sieg — active와 구조가 겹치는 decoy는 성능을 허위로 부풀리는 analogue bias의 직접 원인.
+- **참고한 부분:** "decoy는 active와 구조적으로 충분히 달라야 한다"는 요건을 **active 집합이 바뀔 때마다 재확인**해야 한다는 점.
+- **결론:** 신규 DUD-E 제출 **불필요** — 재균형 설계가 decoy를 real_inactive 개수(210)만큼만 쓰므로 121,952개 풀로 충분.
+
+### (d) 2D descriptor 선택 목록(36개) 동결
+- **무엇을:** 데이터가 늘었지만 WEKA 특징선택을 다시 돌리지 않고 기존 36개 목록을 그대로 사용(노트북 19는 `nrows=0`으로 **컬럼명만** 읽음).
+- **왜:** 새 데이터로 재선택하면 09/28에 정한 "desc2d 포함 조합 고정" 전제가 깨지고, 모델 간 비교(0.866 vs 0.892)가 특징선택 변화와 데이터 증가 중 무엇 때문인지 분리 불가.
+- **레퍼런스:** Guyon & Elisseeff (2003) *An Introduction to Variable and Feature Selection*, JMLR 3:1157. / Ambroise & McLachlan (2002) *Selection bias in gene extraction on the basis of microarray gene-expression data*, PNAS 99:6562.
+- **내용:** Ambroise & McLachlan — 특징선택을 평가 루프 안에서 반복하면 선택 편향(selection bias)으로 성능이 낙관적으로 추정됨.
+- **참고한 부분:** 특징선택을 고정해 두는 것이 변경 효과를 정직하게 비교하는 조건.
+
+### (e) 프로브 화합물 3종 자동 점검 셀 (23b)
+- **무엇을:** 매 평가 시 GW-4064(합성 FXR 작용제, 낮아야 좋음) / Quercetin(식물 플라보노이드) / α-Terthienyl(메리골드 유래, HSD17B13 저해 보고 → 높아야 좋음) 확률을 자동 출력·저장.
+- **왜:** 내부 지표(MCC·ROC)는 학습 화학공간 안에서만 측정되어 **합성 편향 악화를 못 잡는다**. 실제로 이번 재학습에서 MCC는 0.866→0.892로 올랐으나 GW-4064는 0.790→0.900으로 악화 — 고정 프로브 없이는 놓쳤을 신호.
+- **레퍼런스:** Sahigara 등 (2012) *Comparison of Different Approaches to Define the Applicability Domain of QSAR Models*, Molecules 17:4791. / Geirhos 등 (2020) *Shortcut Learning in Deep Neural Networks*, Nature Machine Intelligence 2:665.
+- **내용:** Sahigara — 학습 화학공간 밖 예측은 신뢰도가 별도로 평가돼야 함(적용영역). Geirhos — 분포 내 지표가 좋아도 분포 밖(out-of-distribution) 테스트에서 지름길 학습이 드러남.
+- **참고한 부분:** **분포 밖 고정 테스트 세트**를 상시 유지하라는 원칙. 프로브 3종이 최소 버전.
+
+### (f) 결과 요약 — 개선과 대가
+- **개선:** test MCC 0.866 → **0.892**, 핵심 정직지표 **real_inactive 정답률 0.63 → 0.84**, Brier 0.032 → 0.026.
+- **대가:** 신규 active 710개가 **할로겐 99% / NP≥1 0개**(전부 제약사 특허 합성 시리즈) → 전체 active 할로겐율 89%→91%, NP 중앙값 −1.09→−0.99. **GW-4064 0.790→0.900**(위양성 악화), α-Terthienyl 0.096→0.120(여전히 위음성).
+- **해석:** 공개 데이터를 더 모아도 전부 같은 합성 계열이라 **천연물 도메인 외삽은 개선되지 않음**. 근본 해법은 (i) 천연물 쪽 실측 라벨 확보 또는 (ii) 구조 기반 도킹(8G9V/YYC) 교차검증.
+
 ---
 
 ## 시간순 요약 표
@@ -152,3 +193,4 @@
 | 09/22 | MCC·PR-AUC·보정 | Matthews 1975, Platt 1999 |
 | 09/23 | CV곡선·**할로겐매칭** | ESL, **Geirhos 2020**·DUD-E |
 | 09/28 | **desc2d 조합 고정** | Geirhos 2020, Sahigara 2012 |
+| 10/10 | **PubChem 3소스 추가**·단위정규화·decoy 재검증·특징선택 동결·프로브 상시화 | **Kim 2023 (PubChem)**, Tetko 2016, Sieg 2019, **Ambroise 2002**, Sahigara 2012 |

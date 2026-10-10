@@ -7,12 +7,20 @@
 
 ## 📂 raw/ — 외부 원본 (절대 수정 금지)
 내려받은 원본 데이터. 파이프라인의 출발점.
-- `bindingdb_hsd17b13.tsv`, `chembl_hsd17b13.tsv` — IC50 원본
-- `coconut_csv-09-2026.csv` (683MB), `npass_structures.tsv`, `foodb_2020_4_7_csv/` — 스크리닝 대상 천연물 DB
+- **현재 사용(2026-10-10 다운로드본)**
+  - `261010 binding db hsd17b13 relavent raw.tsv` — BindingDB IC50 원본
+  - `261010 Chembl hsd17b13 relavent raw.csv` — ChEMBL IC50 원본 (**구분자 `;`**, 노트북 01이 자동 판별)
+  - `261010 Chembl hsd17b13 relavent raw.tsv` — 위 csv와 **내용 동일**(확장자만 다름), 미사용
+- **구버전(보존, 미사용)**: `bindingdb_hsd17b13.tsv`, `chembl_hsd17b13.tsv` (2026-08 다운로드본)
+- `coconut_csv-09-2026.csv` (700MB), `npass_structures.tsv`, `foodb_2020_4_7_csv/` — 스크리닝 대상 천연물 DB
 
 ## 📂 interim/ — 중간 산출물 (재생성 가능)
 원본 → 최종 사이의 과정 파일. 지워도 노트북 재실행으로 복원 가능.
-- `HSD17B13_IC50_merged.xlsx` — BindingDB+ChEMBL 병합
+- `HSD17B13_IC50_merged.xlsx` — **BindingDB+ChEMBL+PubChem** 병합(4시트: all_data / duplicates_only / same_dedup_keepdiff / median_per_compound / robust_dedup)
+- `pubchem_hsd17b13_ic50.csv` — PubChem BioAssay(Q7Z5P4, AID 34건) IC50 수집본, **nM 통일 완료**
+  - 단위 규칙: PubChem `IC50` 컬럼=**NANOMOLAR**, `PubChem Standard Value`=**MICROMOLAR**
+- `pubchem_hsd17b13_ic50_raw.csv` — 위의 수집 원시본(aid·outcome·value_src 포함)
+- `pubchem_hsd17b13_actives.csv`, `_pubchem_hsd17b13_active_cids.pkl` — PubChem active CID 목록(NP 점수 포함)
 - `HSD17B13_1to1_descriptors_weka.csv` — WEKA 특징선택 **전** 단계
 - `decoys_clean.*`, `HSD17B13_decoys*.csv`, `dude_*` — decoy 생성 과정
 
@@ -31,15 +39,18 @@
 - `HSD17B13_repr_ensemble.pkl` — **현재 배포 모델**(표현앙상블, 할로겐매칭+desc2d 고정)
 - `HSD17B13_repr_grid.csv`, `HSD17B13_repr_test_summary.csv` — 조합 성능표
 
-## 📂 screening/ — 스크리닝/후보 결과 (신모델)
+## 📂 screening/ — 스크리닝/후보 결과
+> ⚠️ **2026-10-10 기준 전부 구모델(active 2049판) 결과 = stale.** 신모델(active 2759판)로 08b→08c→08d 재실행 필요.
 - `screen_3db_hits_repr.csv/.xlsx` — 3개 DB 스크리닝 전체 후보
 - `screen_repr_th075_flagged.csv` — 임계값 0.75 + 합성지표 플래그
 - `screen_repr_np_filtered.csv` — NP-likeness 통과
 - `screen_repr_np_provenance.csv` — 출처·문헌 검증 천연물 16개
 - `screen_top20_clean_named.csv`, `food_phytochemical_scores.csv`
 
-## 📂 reports/ — 평가 그림
+## 📂 reports/ — 평가 그림 + 지표값
 - `ensemble_evaluation.png` — 6분할 평가
+- `eval_metrics_current.csv` / `.xlsx` — 평가지표 숫자표(시트: 전체지표·혼동행렬·source별)
+- `eval_probe_compounds.csv` — 프로브 3종(GW-4064 / Quercetin / α-Terthienyl) 확률 점검
 - `learning_curve_cv.png`, `calibration_threshold.png`, `_activity_cliff_example.png`
 
 ## 📂 archive/ — 구버전 (대체됨, 보존)

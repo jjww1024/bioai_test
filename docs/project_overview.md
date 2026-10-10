@@ -66,19 +66,43 @@
 - **23 desc2d 조합 고정**: 재학습 시 grid 자동선택이 지문-only 편향 조합을 골라 → desc2d 포함 조합 고정(배포모델 일치). 재스크리닝 시 **GW-4064 8위→67위**.
 - eval 지표/이미지 저장 + **modifications_rationale**(수정별 근거) + **project_overview**(이 문서) 작성.
 
+## 10/10 — 데이터 재수집 + 전 파이프라인 재실행 (PubChem 신규 소스 추가)
+- **raw 신규본 투입**: BindingDB·ChEMBL 재다운로드(`261010 *`). 실질 증가는 BindingDB **+7 분자**, ChEMBL은 **0**(동일 데이터, 구분자만 `;`).
+- **PubChem BioAssay를 3번째 소스로 추가**: UniProt Q7Z5P4 관련 **AID 34건** → IC50 레코드 **2,812건 / 고유 CID 2,422**.
+  - 단위 버그 발견·수정: PubChem `IC50` 컬럼=**nM**, `PubChem Standard Value`=**µM**. (처음 µM로 읽어 1000배 부풀려짐 → 바로잡음)
+  - 대부분 **미국 특허 유래 용량-반응(confirmatory) assay** — HTS 단일농도 잡음 데이터가 아님.
+- **01 개편**: BindingDB+ChEMBL → **+PubChem 3소스 병합**, ChEMBL 구분자 자동판별(`sniff_sep`). → 02·03 그대로 재실행.
+  - 고유 물질 **2,686 → 3,253** / robust_dedup: CONFLICT(>100×) 18건.
+- **17 패치**: ① PART C 저장경로 버그 수정(`data/` → `data/processed/`) ② `REUSE_CLEAN` 모드 추가 —
+  원시 `.picked` 재파싱 없이 기존 clean decoy를 **새 active 기준으로 재검증**(겹침 제거 + Tanimoto 재계산).
+  - 커레이션: **active 2049 → 2759(+710)**, **real_inactive 200 → 210(+10)**.
+  - decoy 풀 121,992 → **121,952** (새 active와 Tanimoto>0.35가 된 40개 제거). **신규 DUD-E 제출 불필요**(풀이 충분).
+- **04·18·09b·19 재실행**: 지문 6종(3,581행), 2D desc 217종, 3D desc 11종(5,503/5,518 성공), v2 최종표 **(5,518 × 5,336)**.
+  - 2D descriptor **선택 목록(36개)은 고정 유지** — 새 데이터로 재선택하면 조합 고정 원칙이 깨지므로 의도적으로 동결.
+- **22 재실행**: active 2759 전부 + real_inactive 210 전부 + **할로겐매칭 decoy 210**(56%→91%, active 91%에 맞춤) = 3,179행.
+- **23 재학습**(고정 조합 그대로) → **MCC 0.866 → 0.892**, **real_inactive 0.63 → 0.84**.
+- **23b 갱신 + 셀 추가**: 평가지표 숫자표(`eval_metrics_current.csv/.xlsx`) + **프로브 3종 자동 점검**(`eval_probe_compounds.csv`).
+- **23c**: 최적 임계값 0.76, Brier 0.026→0.023이나 MCC 0.892→0.863 → **원확률·0.5 유지**(이전과 같은 결론).
+- ⚠️ **대가**: 신규 active 710개가 **99% 할로겐 / NP≥1 0개**(특허 합성 시리즈) → 합성 편향 심화.
+  **GW-4064 0.790 → 0.900**(위양성 악화), α-Terthienyl 0.096 → 0.120(여전히 놓침).
+
 ---
 
-## 현재 상태 (배포 모델)
+## 현재 상태 (배포 모델, 2026-10-10)
 `data/models/HSD17B13_repr_ensemble.pkl`
 - 표현앙상블 5조합(고정): XGB×maccs, RF×rdkit, RF×desc2d, ET×desc2d, ET×topotorsion
-- 학습셋: active 2049 + real_inactive 200 + **할로겐매칭 decoy 200**, class_weight
-- **지표(test):** MCC 0.866 · ROC 0.990 · PR 0.998 · Acc 0.965 · Recall 0.994 · Prec 0.965 · Brier 0.032
-- **source별:** active 0.99 · decoy 1.00 · **real_inactive 0.63** / **프로브:** GW-4064 0.790 · Quercetin 0.340
-- **검증 천연물 후보 16개:** `data/screening/screen_repr_np_provenance.csv`
+- 학습셋: active **2759** + real_inactive **210** + **할로겐매칭 decoy 210** = 3,179 (train 2225 / val 477 / test 477), class_weight
+- **지표(test):** MCC **0.892** · ROC 0.989 · PR 0.998 · Acc 0.975 · Recall 0.983 · Prec 0.988 · Brier 0.026
+- **source별:** active 0.98 · decoy 1.00 · **real_inactive 0.84**
+- **프로브:** GW-4064 **0.900**(↑악화) · Quercetin 0.375 · α-Terthienyl 0.120(↑미미)
+- 스크리닝 결과(`data/screening/*`)는 **구모델 기준 = stale** → 08b~08d 재실행 필요
 
 ## 남은 한계 → 다음
-- real_inactive 63%(activity cliff, 데이터 부족), 합성 편향 잔존, 천연물 도메인 확률 신뢰도 낮음.
-- **근본 검증: 도킹(PDB 8G89) 또는 효소 assay.** / 조합선택을 천연물 검증셋으로 자동화(고정의 정식 대체).
+- **합성 편향이 되려 심해짐**: 공개 HSD17B13 활성 데이터가 전부 제약사 특허 합성물(할로겐 91%, NP≥1 0개).
+  내부 지표(MCC·real_inactive)는 올랐지만 **천연물 도메인 외삽은 더 나빠짐**.
+- real_inactive 84%로 개선됐으나 n=31(test)로 표본이 작음.
+- **근본 검증: 도킹(PDB 8G9V, 리간드 YYC) 또는 효소 assay.**
+- 조합선택을 천연물 검증셋으로 자동화(고정의 정식 대체) / 천연물 쪽 라벨 확보가 유일한 근본 해법.
 
 ---
 ## 논리순서 파이프라인 (참고: 실행 순서와 다름)
