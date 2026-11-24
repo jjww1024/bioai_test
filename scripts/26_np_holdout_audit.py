@@ -27,6 +27,7 @@ except Exception:
 
 import os
 import glob
+import re
 import numpy as np
 import pandas as pd
 from rdkit import Chem, RDLogger
@@ -79,20 +80,41 @@ def load_npass():
     return set(d["InChIKey"].dropna().astype(str))
 
 
+IK_RE = re.compile(r"^[A-Z]{14}-[A-Z]{10}-[A-Z]$")
+
+
+def find_inchikey_column(path, probe=200):
+    """헤더 이름이 아니라 '값의 생김새'로 InChIKey 컬럼을 찾는다.
+
+    FooDB 2020 CSV는 헤더와 데이터가 한 칸씩 어긋나 있다 — 실제 InChIKey는
+    'moldb_smiles'라는 이름의 컬럼에 들어 있고, 'moldb_inchikey'에는 InChI
+    문자열이 들어 있다. 이름을 믿으면 조용히 빈손이 된다.
+    """
+    head = pd.read_csv(path, nrows=probe, low_memory=False, on_bad_lines="skip")
+    best, score = None, 0.0
+    for c in head.columns:
+        vals = head[c].dropna().astype(str)
+        if not len(vals):
+            continue
+        hit = vals.str.match(IK_RE).mean()
+        if hit > score:
+            best, score = c, hit
+    return (best, score) if score >= 0.5 else (None, score)
+
+
 def load_foodb():
-    """FooDB는 Compound.csv 안에 moldb_inchikey 컬럼이 있다."""
     ks = set()
-    cands = glob.glob(os.path.join(FOODB_DIR, "**", "*ompound*.csv"), recursive=True)
-    for p in cands:
+    for p in glob.glob(os.path.join(FOODB_DIR, "**", "*ompound*.csv"), recursive=True):
         try:
-            head = pd.read_csv(p, nrows=0, low_memory=False)
+            col, score = find_inchikey_column(p)
         except Exception:
             continue
-        col = next((c for c in head.columns if "inchikey" in c.lower()), None)
         if not col:
             continue
-        for chunk in pd.read_csv(p, usecols=[col], chunksize=100_000, low_memory=False):
-            ks |= set(chunk[col].dropna().astype(str))
+        print(f"    {os.path.basename(p)}: InChIKey 컬럼 = '{col}' (일치율 {score:.0%})")
+        for chunk in pd.read_csv(p, usecols=[col], chunksize=100_000,
+                                 low_memory=False, on_bad_lines="skip"):
+            ks |= {v for v in chunk[col].dropna().astype(str) if IK_RE.match(v)}
     return ks
 
 

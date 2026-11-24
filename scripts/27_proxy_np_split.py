@@ -88,16 +88,28 @@ def build_np_keyblocks():
     print(f"  COCONUT {len(keys):,}")
     d = pd.read_csv(NPASS, sep="\t", usecols=["InChIKey"], low_memory=False)
     keys |= set(d["InChIKey"].dropna().astype(str))
+    # FooDB 2020 CSV는 헤더와 데이터가 한 칸 어긋나 있다(실제 InChIKey는
+    # 'moldb_smiles' 컬럼에 있음). 이름이 아니라 값의 생김새로 찾는다.
+    import re as _re
+    IK = _re.compile(r"^[A-Z]{14}-[A-Z]{10}-[A-Z]$")
     for p in glob.glob(os.path.join(FOODB_DIR, "**", "*ompound*.csv"), recursive=True):
         try:
-            head = pd.read_csv(p, nrows=0, low_memory=False)
+            head = pd.read_csv(p, nrows=200, low_memory=False, on_bad_lines="skip")
         except Exception:
             continue
-        col = next((c for c in head.columns if "inchikey" in c.lower()), None)
-        if not col:
+        col, score = None, 0.0
+        for c in head.columns:
+            v = head[c].dropna().astype(str)
+            if len(v) and v.str.match(IK).mean() > score:
+                col, score = c, v.str.match(IK).mean()
+        if not col or score < 0.5:
             continue
-        for chunk in pd.read_csv(p, usecols=[col], chunksize=100_000, low_memory=False):
-            keys |= set(chunk[col].dropna().astype(str))
+        print(f"  FooDB InChIKey 컬럼 = '{col}' (일치율 {score:.0%})")
+        n0 = len(keys)
+        for chunk in pd.read_csv(p, usecols=[col], chunksize=100_000,
+                                 low_memory=False, on_bad_lines="skip"):
+            keys |= {v for v in chunk[col].dropna().astype(str) if IK.match(v)}
+        print(f"  FooDB {len(keys) - n0:,}개 추가")
     blocks = {k.split("-")[0] for k in keys if isinstance(k, str) and "-" in k}
     os.makedirs(os.path.dirname(KEYCACHE), exist_ok=True)
     with open(KEYCACHE, "w", encoding="utf-8") as f:
